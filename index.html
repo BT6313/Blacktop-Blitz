@@ -324,7 +324,53 @@
       box-shadow: 0 0 16px rgba(0,255,200,0.2);
     }
     .car-card.locked { opacity: 0.5; cursor: default; }
+    /* A car with its free trial still unused is the main path to the crush
+       mechanic, so it must not be dimmed like an ordinary locked car. */
+    .car-card.trial-ready {
+      opacity: 1;
+      cursor: pointer;
+      border-color: rgba(0,255,200,0.55);
+      background: rgba(0,255,200,0.07);
+      animation: trialCardPulse 2s ease-in-out infinite;
+    }
+    @keyframes trialCardPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(0,255,200,0.40); }
+      50%      { box-shadow: 0 0 0 7px rgba(0,255,200,0); }
+    }
+    .trial-badge {
+      margin-top: 5px;
+      background: #00ffc8;
+      color: #000;
+      font-size: 0.6rem;
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      padding: 3px 6px;
+      border-radius: 20px;
+      display: inline-block;
+      white-space: nowrap;
+      max-width: 100%;
+      box-shadow: 0 0 10px rgba(0,255,200,0.55);
+    }
+    .trial-badge-used {
+      margin-top: 5px;
+      color: rgba(0,255,200,0.75);
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .car-card.trial-ready { animation: none; }
+    }
     .car-card .car-emoji { font-size: 1.8rem; }
+    .car-icon {
+      width: 46px;
+      height: 46px;
+      object-fit: contain;
+      display: block;
+      image-rendering: auto;
+    }
+    .car-icon-lg { width: 68px; height: 68px; margin: 0 auto; }
     .car-card .car-name { font-size: 0.65rem; font-weight: 600; color: rgba(224,224,240,0.7); letter-spacing: 0.05em; }
     .car-card .car-cost { font-size: 0.7rem; font-family: 'Azeret Mono', monospace; color: #ffd700; }
     .car-card .car-ability { font-size: 0.55rem; color: #88ffcc; margin-top: 2px; line-height: 1.2; }
@@ -532,6 +578,6 @@
 
 </div>
 
-<script src="game.js?v=1.7.0"></script>
+<script src="game.js?v=1.7.1"></script>
 </body>
 </html>

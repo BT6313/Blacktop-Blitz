@@ -45,7 +45,7 @@ const CARS = [
   { id: 'taxi',     name: 'TAXI PRO',    emoji: '🛻',  cost: 5000,  color: '#ffaa00', accent: '#ffcc55', ability: null },
   { id: 'monster',  name: 'MONSTER',     emoji: '🚙',  cost: 8000,  color: '#cc6600', accent: '#ff9933', ability: 'crush_cars',
     desc: 'Crushes cars! Dies on semis.' },
-  { id: 'snowplow', name: 'SNOWPLOW',    emoji: '🚛',  cost: 10000, color: '#3399cc', accent: '#88ddff', ability: 'crush_all',
+  { id: 'snowplow', name: 'SNOWPLOW',    emoji: '🚛',  cost: 10000, color: '#1f7fd6', accent: '#8fe0ff', ability: 'crush_all',
     desc: 'Crushes everything! Head-on semis = death.' },
 ];
 
@@ -1632,6 +1632,54 @@ function buildLeaderboard() {
     </div>`
   ).join('');
 }
+// ─── CAR ICONS ───────────────────────────────────────────────
+// The garage used emoji, but there is no monster-truck emoji, so MONSTER
+// reused the CRUISER glyph and SNOWPLOW reused SEMI's - the two vehicles
+// that most need to look distinct wore another car's badge. Render each
+// car with its real in-game sprite instead, so a card previews what you
+// actually drive.
+const CAR_ICON_BOX = 46;
+const _carIcons = {};
+function carIconURL(car) {
+  if (_carIcons[car.id]) return _carIcons[car.id];
+  // Several sprites draw outside their nominal w*h box - the snowplow's blade
+  // sits above the cab and overhangs both sides, the semi vents smoke upward,
+  // the monster truck's wheels protrude. Fit to the *drawn* extent, not the
+  // vehicle box, or the blade gets clipped off and a snowplow looks like a semi.
+  let w, h, paint, bw, bh, dy;
+  if (car.id === 'monster') {
+    w = C.MONSTER_W; h = C.MONSTER_H;
+    bw = w * 1.16; bh = h * 1.08; dy = 0;
+    paint = c => drawMonsterTruck(c, 0, 0, car.color, car.accent);
+  } else if (car.id === 'snowplow') {
+    w = C.PLOW_W; h = C.PLOW_H;
+    bw = w * 1.20; bh = h * 1.18; dy = h * 0.07;   // room above for the blade
+    paint = c => drawSnowplowSemi(c, 0, 0, car.color, car.accent);
+  } else if (car.id === 'truck') {
+    w = C.SEMI_W; h = C.SEMI_H;
+    bw = w * 1.10; bh = h * 1.12; dy = h * 0.04;
+    paint = c => drawSemiTruck(c, 0, 0, car.color, car.accent);
+  } else {
+    w = C.CAR_W; h = C.CAR_H;
+    bw = w * 1.08; bh = h * 1.08; dy = 0;
+    paint = c => drawPixelCar(c, 0, 0, C.CAR_W, C.CAR_H, car.color, car.accent);
+  }
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const pad = 3;
+  const scale = Math.min((CAR_ICON_BOX - pad * 2) / bw, (CAR_ICON_BOX - pad * 2) / bh);
+  const cv = document.createElement('canvas');
+  cv.width = CAR_ICON_BOX * dpr;
+  cv.height = CAR_ICON_BOX * dpr;
+  const c = cv.getContext('2d');
+  c.scale(dpr, dpr);
+  c.translate(CAR_ICON_BOX / 2, CAR_ICON_BOX / 2);
+  c.scale(scale, scale);
+  c.translate(0, dy);
+  paint(c);
+  _carIcons[car.id] = cv.toDataURL('image/png');
+  return _carIcons[car.id];
+}
+
 function buildGarage() {
   document.getElementById('garage-coins').textContent = `🪙 ${Save.data.coins} coins`;
   const grid = document.getElementById('car-grid');
@@ -1649,11 +1697,14 @@ function buildGarage() {
       costLabel = '🪙 ' + car.cost;
     }
     const trialBadge = trialable && !tried
-      ? `<div style="margin-top:5px;background:#00ffc8;color:#000;font-size:0.6rem;font-weight:900;letter-spacing:0.06em;padding:3px 6px;border-radius:20px;display:inline-block;white-space:nowrap;max-width:100%;">1 FREE TRY</div>`
-      : (tried ? `<div style="margin-top:5px;color:#00ffc8;font-size:0.6rem;font-weight:700;letter-spacing:0.06em;">✓ TRIED</div>` : '');
-    return `<div class="car-card${selected?' selected':''}${!owned?' locked':''}"
+      ? `<div class="trial-badge">1 FREE TRY</div>`
+      : (tried ? `<div class="trial-badge-used">✓ TRIED</div>` : '');
+    // An unused free trial stays highlighted; once used the card goes back to
+    // looking like any other locked car.
+    const trialReady = trialable && !tried;
+    return `<div class="car-card${selected?' selected':''}${!owned?' locked':''}${trialReady?' trial-ready':''}"
       onclick="Garage.tap('${car.id}')">
-      <div class="car-emoji">${car.emoji}</div>
+      <img class="car-icon" src="${carIconURL(car)}" alt="${car.name}" />
       <div class="car-name">${car.name}</div>
       <div class="car-cost">${costLabel}</div>
       ${trialBadge}
@@ -1691,7 +1742,8 @@ const TrialModal = {
     if (!car) return;
     this._carId = id;
     const tried = (Save.data.triedCars || []).includes(id);
-    document.getElementById('trial-emoji').textContent = car.emoji;
+    document.getElementById('trial-emoji').innerHTML =
+      `<img class="car-icon car-icon-lg" src="${carIconURL(car)}" alt="${car.name}" />`;
     document.getElementById('trial-name').textContent = car.name;
     document.getElementById('trial-cost').textContent =
       `🪙 ${car.cost.toLocaleString()} coins to unlock  ·  You have: ${Save.data.coins.toLocaleString()}`;
