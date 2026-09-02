@@ -52,23 +52,68 @@ const CARS = [
 const ENEMY_EMOJIS = ['🚙','🚐','🚑','🚓','🚚','🚌','🚎','🏎️','🚜'];
 
 // ─── PERSISTENT STATE ────────────────────────────────────────
+const SAVE_KEY = 'blacktopBlitz.save.v1';
+
+// Storage shim: localStorage when it works, in-memory when it doesn't
+// (private browsing, embedded portal iframes with cookies blocked, etc.)
+const Store = {
+  _mem: null,
+  _ok: null,
+  available() {
+    if (this._ok !== null) return this._ok;
+    try {
+      const k = '__bb_test__';
+      window.localStorage.setItem(k, '1');
+      window.localStorage.removeItem(k);
+      this._ok = true;
+    } catch (e) {
+      this._ok = false;
+    }
+    return this._ok;
+  },
+  get() {
+    if (this.available()) {
+      try { return window.localStorage.getItem(SAVE_KEY); } catch (e) {}
+    }
+    return this._mem;
+  },
+  set(str) {
+    this._mem = str;
+    if (this.available()) {
+      try { window.localStorage.setItem(SAVE_KEY, str); } catch (e) {}
+    }
+  },
+};
+
 const Save = {
   data: {},
-  // Persistence via in-memory store (survives the session)
   load() {
-    const raw = window._hdSave || null;
-    try { if (raw) this.data = JSON.parse(raw); } catch(e) {}
-    if (!this.data.coins)      this.data.coins = 0;
-    if (!this.data.highScores) this.data.highScores = [];
-    if (!this.data.ownedCars)  this.data.ownedCars = ['red','blue','yellow'];
-    if (!this.data.activeCar)  this.data.activeCar = 'red';
-    if (!this.data.totalCoins) this.data.totalCoins = 0;
-    if (!this.data.deathCount) this.data.deathCount = 0;
-    if (this.data.adsFree === undefined) this.data.adsFree = false;
-    if (!this.data.triedCars)  this.data.triedCars = [];
+    const raw = Store.get();
+    try { if (raw) this.data = JSON.parse(raw) || {}; } catch(e) { this.data = {}; }
+    if (typeof this.data !== 'object' || this.data === null) this.data = {};
+    // Type-check everything: a persisted save that got corrupted would
+    // otherwise brick the game on every load instead of clearing on refresh.
+    const num = (v) => (typeof v === 'number' && isFinite(v) && v >= 0) ? Math.floor(v) : 0;
+    const d = this.data;
+    d.coins      = num(d.coins);
+    d.totalCoins = num(d.totalCoins);
+    d.deathCount = num(d.deathCount);
+    d.highScores = Array.isArray(d.highScores)
+      ? d.highScores.filter(n => typeof n === 'number' && isFinite(n)).slice(0, 10) : [];
+    d.ownedCars = Array.isArray(d.ownedCars)
+      ? d.ownedCars.filter(id => CARS.some(c => c.id === id)) : [];
+    // Starter cars are always owned
+    for (const id of ['red','blue','yellow']) {
+      if (!d.ownedCars.includes(id)) d.ownedCars.push(id);
+    }
+    d.triedCars = Array.isArray(d.triedCars)
+      ? d.triedCars.filter(id => CARS.some(c => c.id === id)) : [];
+    // Never leave activeCar pointing at a car the player doesn't own
+    if (!d.ownedCars.includes(d.activeCar)) d.activeCar = 'red';
+    d.adsFree = d.adsFree === true;
   },
   save() {
-    try { window._hdSave = JSON.stringify(this.data); } catch(e) {}
+    try { Store.set(JSON.stringify(this.data)); } catch(e) {}
   },
   addScore(score) {
     this.data.highScores.push(score);
@@ -1784,6 +1829,7 @@ const Game = {
         document.getElementById('go-score').textContent = finalScore.toLocaleString();
         document.getElementById('go-best').textContent = 'BEST: ' + Save.getBest().toLocaleString();
         document.getElementById('go-coins').textContent = `🪙 +${this.sessionCoins} coins collected`;
+        this._maybeOfferTrial();
         if (showAd) {
           // Show interstitial; game-over screen appears after ad is dismissed
           AdSystem.show(() => showScreen('screen-gameover'));
@@ -1792,6 +1838,32 @@ const Game = {
         }
       }
     }, 900);
+  },
+
+  // The crush vehicles are what make this game not-just-another-lane-dodger,
+  // but the free trial for them is buried in the garage where most players
+  // never look. Surface it on the game-over screen instead.
+  _maybeOfferTrial() {
+    const btn = document.getElementById('go-trial-btn');
+    if (!btn) return;
+    const candidate = CARS.find(c =>
+      c.ability &&
+      !Save.data.ownedCars.includes(c.id) &&
+      !Save.data.triedCars.includes(c.id)
+    );
+    // Give them a couple of normal runs first so the contrast lands
+    if (!candidate || Save.data.deathCount < 2) {
+      btn.style.display = 'none';
+      btn.onclick = null;
+      return;
+    }
+    btn.textContent = `${candidate.emoji} TRY ${candidate.name} — FREE`;
+    btn.style.display = '';
+    btn.onclick = () => {
+      btn.style.display = 'none';
+      btn.onclick = null;
+      Game.startTrial(candidate.id);
+    };
   },
 
   _update(dt) {
