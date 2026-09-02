@@ -539,15 +539,21 @@ const Input = {
       this.nitro = this._touchLeft  &&  this._touchRight;
     };
     window._activeTouches = new Set();
+    // Only swallow touch defaults during actual gameplay. Calling
+    // preventDefault() on the first touchmove tells the browser not to
+    // synthesise the compatibility click event, so doing it unconditionally
+    // killed every menu button on touch devices (any tap with the slightest
+    // finger movement produced no click) and blocked scrolling in the garage.
+    const inPlay = () => Game.state === 'playing';
     const addTouch = e => {
-      e.preventDefault();
+      if (inPlay()) e.preventDefault();
       for (const t of e.changedTouches) window._activeTouches.add(t.identifier + '|' + t.clientX);
       // Re-map by identifier
       window._activeTouches = new Set(Array.from(e.touches).map(t => ({ clientX: t.clientX })));
       setTouches();
     };
     const removeTouch = e => {
-      e.preventDefault();
+      if (inPlay()) e.preventDefault();
       window._activeTouches = new Set(Array.from(e.touches).map(t => ({ clientX: t.clientX })));
       setTouches();
     };

@@ -47,6 +47,9 @@
       z-index: 10;
     }
     #ui * { pointer-events: auto; }
+    /* Buttons need their own touch-action: body sets none, which suppresses
+       the tap gesture that produces a click. */
+    .btn, button { touch-action: manipulation; }
     .btn-trial {
       background: linear-gradient(135deg, #ff9933, #ffcc00);
       color: #1a0d00;
@@ -399,6 +402,7 @@
       overflow-y: auto;
       overflow-x: hidden;   /* grid rounding overflows by ~2px and raises a scrollbar */
       -webkit-overflow-scrolling: touch;
+      touch-action: pan-y;  /* body sets touch-action:none, which blocks scrolling here */
     }
     .scroll-panel::-webkit-scrollbar { width: 4px; }
     .scroll-panel::-webkit-scrollbar-track { background: transparent; }
@@ -528,6 +532,6 @@
 
 </div>
 
-<script src="game.js?v=1.6.6"></script>
+<script src="game.js?v=1.7.0"></script>
 </body>
 </html>
