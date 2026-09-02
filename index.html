@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d0d1a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Blacktop Blitz" />
+  <meta name="description" content="Blacktop Blitz — dodge traffic, crush rivals, and go for the high score!" />
+  <title>Blacktop Blitz</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@400;600;700;900&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #0d0d1a;
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    #gameCanvas {
+      display: block;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+    }
+    /* UI Overlay — sits above canvas */
+    #ui {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+    #ui * { pointer-events: auto; }
+    /* Screens */
+    .screen {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+      visibility: hidden;
+    }
+    .screen.active {
+      opacity: 1;
+      pointer-events: auto;
+      visibility: visible;
+    }
+    /* Panel */
+    .panel {
+      background: rgba(13, 13, 26, 0.92);
+      border: 1px solid rgba(0, 255, 200, 0.18);
+      border-radius: 18px;
+      padding: 28px 32px;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      width: min(360px, 90vw);
+      text-align: center;
+    }
+    /* Typography */
+    .game-title {
+      font-family: 'Azeret Mono', monospace;
+      font-size: clamp(2rem, 8vw, 3.2rem);
+      font-weight: 900;
+      color: #00ffc8;
+      text-shadow: 0 0 24px rgba(0,255,200,0.5), 0 0 60px rgba(0,255,200,0.2);
+      letter-spacing: 0.04em;
+      line-height: 1.1;
+      margin-bottom: 4px;
+    }
+    .game-subtitle {
+      font-family: 'Azeret Mono', monospace;
+      font-size: clamp(0.65rem, 2.5vw, 0.8rem);
+      color: rgba(0,255,200,0.5);
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      margin-bottom: 24px;
+    }
+    h2 {
+      font-family: 'Azeret Mono', monospace;
+      font-size: 1.3rem;
+      color: #00ffc8;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      margin-bottom: 18px;
+    }
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 14px 28px;
+      border-radius: 50px;
+      border: none;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.12s, box-shadow 0.12s, background 0.12s;
+      width: 100%;
+      margin-bottom: 10px;
+      letter-spacing: 0.02em;
+    }
+    .btn:active { transform: scale(0.96); }
+    .btn-primary {
+      background: #00ffc8;
+      color: #0d0d1a;
+      box-shadow: 0 4px 20px rgba(0,255,200,0.35);
+    }
+    .btn-primary:hover { background: #33ffda; box-shadow: 0 4px 28px rgba(0,255,200,0.5); }
+    .btn-secondary {
+      background: rgba(255,255,255,0.07);
+      color: #e0e0f0;
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    .btn-secondary:hover { background: rgba(255,255,255,0.12); }
+    .btn-danger {
+      background: rgba(255, 60, 90, 0.15);
+      color: #ff5070;
+      border: 1px solid rgba(255,60,90,0.25);
+    }
+    /* HUD */
+    #hud {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      display: none;
+    }
+    #hud.active { display: block; }
+    #score-display {
+      position: absolute;
+      top: env(safe-area-inset-top, 16px);
+      left: 50%;
+      transform: translateX(-50%);
+      margin-top: 8px;
+      font-family: 'Azeret Mono', monospace;
+      font-size: clamp(1.4rem, 5vw, 2rem);
+      font-weight: 900;
+      color: #fff;
+      text-shadow: 0 2px 12px rgba(0,0,0,0.8), 0 0 20px rgba(0,255,200,0.3);
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums lining-nums;
+    }
+    #coin-display {
+      position: absolute;
+      top: env(safe-area-inset-top, 16px);
+      right: 16px;
+      margin-top: 8px;
+      font-family: 'Azeret Mono', monospace;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #ffd700;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+      font-variant-numeric: tabular-nums lining-nums;
+    }
+    #combo-display {
+      position: absolute;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: 'Azeret Mono', monospace;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #ffaa22;
+      text-shadow: 0 0 16px rgba(255,170,34,0.7);
+      opacity: 0;
+      transition: opacity 0.3s;
+      white-space: nowrap;
+      letter-spacing: 0.08em;
+    }
+    #combo-display.show { opacity: 1; }
+    #nitro-bar-wrap {
+      position: absolute;
+      bottom: calc(env(safe-area-inset-bottom, 20px) + 20px);
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    #nitro-label {
+      font-family: 'Azeret Mono', monospace;
+      font-size: 0.6rem;
+      font-weight: 700;
+      color: rgba(255,200,0,0.6);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+    }
+    #nitro-bar-bg {
+      width: 120px;
+      height: 8px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid rgba(255,200,0,0.2);
+    }
+    #nitro-bar {
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(90deg, #ffaa00, #ffe066);
+      border-radius: 4px;
+      transition: width 0.05s linear;
+      box-shadow: 0 0 8px rgba(255,180,0,0.5);
+    }
+    /* Touch zones (invisible but capture touches) */
+    #touch-left, #touch-right {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 50%;
+      pointer-events: auto;
+      z-index: 5;
+    }
+    #touch-left { left: 0; }
+    #touch-right { right: 0; }
+    /* Menu layouts */
+    .instructions {
+      text-align: left;
+      font-size: 0.85rem;
+      color: rgba(224,224,240,0.75);
+      line-height: 1.8;
+      margin-bottom: 22px;
+    }
+    .instructions div {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+    .instructions span.key {
+      font-family: 'Azeret Mono', monospace;
+      font-size: 0.75rem;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 6px;
+      padding: 2px 8px;
+      min-width: 56px;
+      text-align: center;
+      color: #00ffc8;
+    }
+    /* Leaderboard */
+    #lb-list {
+      width: 100%;
+      margin-bottom: 18px;
+    }
+    .lb-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 8px;
+      margin-bottom: 6px;
+      font-size: 0.9rem;
+      font-variant-numeric: tabular-nums lining-nums;
+    }
+    .lb-row:nth-child(odd) { background: rgba(255,255,255,0.05); }
+    .lb-row.gold { border: 1px solid rgba(255,215,0,0.35); background: rgba(255,215,0,0.08); }
+    .lb-row .lb-rank { font-family: 'Azeret Mono', monospace; font-weight: 700; color: #00ffc8; width: 28px; }
+    .lb-row .lb-name { flex: 1; text-align: left; padding-left: 8px; color: #e0e0f0; }
+    .lb-row .lb-score { font-family: 'Azeret Mono', monospace; font-weight: 700; color: #fff; }
+    /* Garage */
+    .car-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 18px;
+      width: 100%;
+    }
+    .car-card {
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      padding: 12px 8px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      background: rgba(255,255,255,0.04);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .car-card.selected {
+      border-color: #00ffc8;
+      background: rgba(0,255,200,0.08);
+      box-shadow: 0 0 16px rgba(0,255,200,0.2);
+    }
+    .car-card.locked { opacity: 0.5; cursor: default; }
+    .car-card .car-emoji { font-size: 1.8rem; }
+    .car-card .car-name { font-size: 0.65rem; font-weight: 600; color: rgba(224,224,240,0.7); letter-spacing: 0.05em; }
+    .car-card .car-cost { font-size: 0.7rem; font-family: 'Azeret Mono', monospace; color: #ffd700; }
+    .car-card .car-ability { font-size: 0.55rem; color: #88ffcc; margin-top: 2px; line-height: 1.2; }
+    /* Coin tally in menu */
+    .coin-tally {
+      font-family: 'Azeret Mono', monospace;
+      font-size: 1rem;
+      color: #ffd700;
+      margin-bottom: 14px;
+      text-align: center;
+    }
+    /* Game over */
+    #go-score {
+      font-family: 'Azeret Mono', monospace;
+      font-size: 2.2rem;
+      font-weight: 900;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+    #go-best {
+      font-family: 'Azeret Mono', monospace;
+      font-size: 0.8rem;
+      color: #00ffc8;
+      letter-spacing: 0.1em;
+      margin-bottom: 4px;
+    }
+    #go-coins {
+      font-family: 'Azeret Mono', monospace;
+      font-size: 0.9rem;
+      color: #ffd700;
+      margin-bottom: 22px;
+    }
+    /* Safe area padding for notched phones */
+    .screen-inner {
+      padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+    }
+    /* Flare/flash overlay */
+    #flash {
+      position: fixed;
+      inset: 0;
+      background: #fff;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 50;
+      transition: opacity 0.08s;
+    }
+
+    /* Notification toast */
+    #toast {
+      position: fixed;
+      bottom: calc(env(safe-area-inset-bottom, 20px) + 100px);
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: rgba(0,255,200,0.15);
+      border: 1px solid rgba(0,255,200,0.3);
+      color: #00ffc8;
+      font-family: 'Azeret Mono', monospace;
+      font-size: 0.85rem;
+      font-weight: 700;
+      padding: 10px 20px;
+      border-radius: 50px;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 100;
+      transition: opacity 0.3s, transform 0.3s;
+      white-space: nowrap;
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    /* Scrollable panels */
+    .scroll-panel {
+      max-height: 55vh;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .scroll-panel::-webkit-scrollbar { width: 4px; }
+    .scroll-panel::-webkit-scrollbar-track { background: transparent; }
+    .scroll-panel::-webkit-scrollbar-thumb { background: rgba(0,255,200,0.2); border-radius: 2px; }
+
+    /* ── AD INTERSTITIAL ── */
+    #screen-ad .ad-box {
+      background: rgba(13,13,26,0.97);
+      border: 1px solid rgba(0,255,200,0.18);
+      border-radius: 18px;
+      padding: 36px 32px 28px;
+      width: min(360px, 90vw);
+      text-align: center;
+      backdrop-filter: blur(16px);
+    }
+    .ad-label {
+      font-family: 'Azeret Mono', monospace;
+      font-size: 0.6rem;
+      letter-spacing: 0.22em;
+      color: rgba(255,255,255,0.3);
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .ad-placeholder {
+      background: rgba(255,255,255,0.04);
+      border: 1px dashed rgba(255,255,255,0.12);
+      border-radius: 10px;
+      height: 160px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 18px;
+      color: rgba(255,255,255,0.25);
+      font-size: 0.8rem;
+    }
+    .ad-placeholder .ad-icon { font-size: 2.4rem; opacity: 0.4; }
+    #ad-countdown {
+      font-family: 'Azeret Mono', monospace;
+      font-size: 0.85rem;
+      color: rgba(0,255,200,0.55);
+      margin-bottom: 16px;
+      letter-spacing: 0.08em;
+    }
+    #ad-close-btn {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    #ad-close-btn.ready {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .ad-skip-note {
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.25);
+      margin-top: 8px;
+    }
+
+    /* ── MARKETPLACE ── */
+    #screen-shop .shop-panel {
+      background: rgba(13,13,26,0.95);
+      border: 1px solid rgba(0,255,200,0.18);
+      border-radius: 18px;
+      width: min(360px, 90vw);
+      max-height: 88vh;
+      display: flex;
+      flex-direction: column;
+      backdrop-filter: blur(16px);
+      overflow: hidden;
+    }
+    .shop-header {
+      flex-shrink: 0;
+      padding: 22px 28px 10px;
+      text-align: center;
+    }
+    .shop-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 0 20px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .shop-scroll::-webkit-scrollbar { width: 4px; }
+    .shop-scroll::-webkit-scrollbar-thumb { background: rgba(0,255,200,0.2); border-radius: 2px; }
+    .shop-footer {
+      flex-shrink: 0;
+      padding: 10px 20px 18px;
+    }
+    .shop-section-label {
+      font-family: 'Azeret Mono', monospace;
+      font-size: 0.6rem;
+      letter-spacing: 0.2em;
+      color: rgba(0,255,200,0.45);
+      text-transform: uppercase;
+      margin: 14px 0 8px;
+    }
+    .shop-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 13px 14px;
+      margin-bottom: 8px;
+      gap: 10px;
+    }
+    .shop-item-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+    }
+    .shop-item-icon { font-size: 1.6rem; flex-shrink: 0; }
+    .shop-item-name {
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: #e0e0f0;
+    }
+    .shop-item-sub {
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.35);
+      margin-top: 1px;
+    }
+    .shop-buy-btn {
+      flex-shrink: 0;
+      background: #00ffc8;
+      color: #0d0d1a;
+      border: none;
+      border-radius: 50px;
+      padding: 8px 16px;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.1s, background 0.1s;
+      white-space: nowrap;
+    }
+    .shop-buy-btn:active { transform: scale(0.94); }
+    .shop-buy-btn:hover { background: #33ffda; }
+    .shop-buy-btn.owned {
+      background: rgba(0,255,200,0.12);
+      color: #00ffc8;
+      border: 1px solid rgba(0,255,200,0.25);
+      cursor: default;
+    }
+    .shop-coins-display {
+      font-family: 'Azeret Mono', monospace;
+      font-size: 0.95rem;
+      color: #ffd700;
+      text-align: center;
+      margin-bottom: 6px;
+    }
+  </style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+
+<!-- Flash overlay for collision -->
+<div id="flash"></div>
+
+<!-- Toast notification -->
+<div id="toast"></div>
+
+<!-- Touch zones (only active during gameplay) -->
+<div id="touch-left" style="pointer-events:none;"></div>
+<div id="touch-right" style="pointer-events:none;"></div>
+
+<div id="ui">
+
+  <!-- HUD (during gameplay) -->
+  <div id="hud">
+    <div id="score-display">0</div>
+    <div id="coin-display">🪙 0</div>
+    <div id="combo-display">🔥 COMBO x2!</div>
+    <div id="nitro-bar-wrap">
+      <div id="nitro-label">⚡ NITRO</div>
+      <div id="nitro-bar-bg"><div id="nitro-bar"></div></div>
+    </div>
+  </div>
+
+  <!-- TITLE SCREEN -->
+  <div id="screen-title" class="screen active">
+    <div class="panel">
+      <div class="game-title">BLACKTOP<br>BLITZ</div>
+      <div class="game-subtitle">Endless Road Survival</div>
+      <div class="instructions">
+        <div><span class="key">← →</span> Move left / right</div>
+        <div><span class="key">SPACE</span> Nitro boost</div>
+        <div><span class="key">👈👉</span> Tap left / right</div>
+        <div><span class="key">⚡</span> Both sides = NITRO</div>
+        <div style="margin-top:6px;color:#00ffc8;font-size:0.8rem;">🪙 Stay in lane · 🔥 5 in a row = COMBO x2</div>
+      </div>
+      <button class="btn btn-primary" onclick="Game.start()">PLAY</button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-secondary" style="margin-bottom:0;font-size:0.8rem;" onclick="showScreen('screen-leaderboard')">🏆 Board</button>
+        <button class="btn btn-secondary" style="margin-bottom:0;font-size:0.8rem;" onclick="showScreen('screen-garage')">🚗 Garage</button>
+        <button class="btn btn-secondary" style="margin-bottom:0;font-size:0.8rem;" onclick="Shop.open('screen-title')">🛒 Shop</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GAME OVER SCREEN -->
+  <div id="screen-gameover" class="screen">
+    <div class="panel">
+      <h2>GAME OVER</h2>
+      <div id="go-score">0</div>
+      <div id="go-best">BEST: 0</div>
+      <div id="go-coins">🪙 +0 coins collected</div>
+      <button class="btn btn-primary" onclick="Game.start()">PLAY AGAIN</button>
+      <button class="btn btn-secondary" onclick="showScreen('screen-title')">MENU</button>
+    </div>
+  </div>
+
+  <!-- LEADERBOARD SCREEN -->
+  <div id="screen-leaderboard" class="screen">
+    <div class="panel" style="display:flex;flex-direction:column;max-height:82vh;padding-bottom:0;">
+      <div style="flex-shrink:0;padding-bottom:10px;">
+        <h2>🏆 HIGH SCORES</h2>
+      </div>
+      <div class="scroll-panel" style="flex:1;min-height:0;margin-bottom:0;">
+        <div id="lb-list"></div>
+      </div>
+      <div style="flex-shrink:0;padding:12px 0 16px;">
+        <button class="btn btn-secondary" style="margin-bottom:0;" onclick="showScreen('screen-title')">← BACK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GARAGE SCREEN -->
+  <div id="screen-garage" class="screen">
+    <div class="panel" style="display:flex;flex-direction:column;max-height:82vh;padding-bottom:0;">
+      <!-- Fixed header -->
+      <div style="flex-shrink:0;padding-bottom:10px;">
+        <h2>🚗 GARAGE</h2>
+        <div class="coin-tally" id="garage-coins">🪙 0</div>
+      </div>
+      <!-- Scrollable grid -->
+      <div class="scroll-panel" style="flex:1;min-height:0;margin-bottom:0;">
+        <div class="car-grid" id="car-grid"></div>
+      </div>
+      <!-- Fixed footer -->
+      <div style="flex-shrink:0;padding:10px 0 16px;display:flex;gap:8px;">
+        <button class="btn btn-secondary" style="margin-bottom:0;" onclick="showScreen('screen-title')">← BACK</button>
+        <button class="btn btn-secondary" style="margin-bottom:0;background:rgba(0,255,200,0.06);border-color:rgba(0,255,200,0.2);color:#00ffc8;" onclick="Shop.open('screen-garage')">🛒 Shop</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRIAL MODAL OVERLAY -->
+  <div id="trial-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.75);align-items:center;justify-content:center;flex-direction:column;">
+    <div style="background:#14141f;border:2px solid rgba(0,255,200,0.3);border-radius:18px;padding:28px 24px 22px;max-width:300px;width:90%;text-align:center;">
+      <div id="trial-emoji" style="font-size:3rem;margin-bottom:6px;"></div>
+      <div id="trial-name" style="font-size:1.1rem;font-weight:800;color:#fff;letter-spacing:0.08em;margin-bottom:4px;"></div>
+      <div id="trial-cost" style="font-size:0.85rem;color:#aaa;margin-bottom:16px;"></div>
+      <div style="display:flex;gap:10px;justify-content:center;margin-bottom:10px;">
+        <button id="trial-btn-buy" onclick="TrialModal.buy()" style="flex:1;padding:12px 6px;background:#00ffc8;color:#000;border:none;border-radius:10px;font-size:0.85rem;font-weight:800;letter-spacing:0.05em;cursor:pointer;">BUY</button>
+        <button id="trial-btn-try" onclick="TrialModal.tryFree()" style="flex:1;padding:12px 6px;background:rgba(0,255,200,0.12);color:#00ffc8;border:2px solid rgba(0,255,200,0.4);border-radius:10px;font-size:0.85rem;font-weight:800;letter-spacing:0.05em;cursor:pointer;">▶ TRY FREE</button>
+      </div>
+      <button onclick="TrialModal.close()" style="background:none;border:none;color:#666;font-size:0.8rem;cursor:pointer;padding:4px;">Cancel</button>
+    </div>
+  </div>
+
+  <!-- AD INTERSTITIAL SCREEN -->
+  <div id="screen-ad" class="screen">
+    <div class="ad-box">
+      <div class="ad-label">Advertisement</div>
+      <div class="ad-placeholder">
+        <div class="ad-icon">📺</div>
+        <div>Ad space — connect your ad network</div>
+      </div>
+      <div id="ad-countdown">Closing in 5…</div>
+      <button id="ad-close-btn" class="btn btn-secondary" style="margin-bottom:0;" onclick="AdSystem.close()">✕ Close Ad</button>
+      <div class="ad-skip-note">Remove ads forever in the Shop</div>
+    </div>
+  </div>
+
+  <!-- MARKETPLACE / SHOP SCREEN -->
+  <div id="screen-shop" class="screen">
+    <div class="shop-panel">
+      <div class="shop-header">
+        <h2 style="margin-bottom:4px;">🛒 SHOP</h2>
+        <div class="shop-coins-display" id="shop-coins">🪙 0 coins</div>
+      </div>
+      <div class="shop-scroll">
+        <div class="shop-section-label">Remove Ads</div>
+        <div class="shop-item" id="shop-item-noads">
+          <div class="shop-item-info">
+            <div class="shop-item-icon">🚫</div>
+            <div>
+              <div class="shop-item-name">No Ads</div>
+              <div class="shop-item-sub">Remove all ads forever</div>
+            </div>
+          </div>
+          <button class="shop-buy-btn" id="shop-btn-noads" onclick="Shop.buy('noads')">$4.99</button>
+        </div>
+
+        <div class="shop-section-label">Coin Packs</div>
+        <div class="shop-item">
+          <div class="shop-item-info">
+            <div class="shop-item-icon">🪙</div>
+            <div>
+              <div class="shop-item-name">1,000 Coins</div>
+              <div class="shop-item-sub">Good start</div>
+            </div>
+          </div>
+          <button class="shop-buy-btn" onclick="Shop.buy('coins_1000')">$1.99</button>
+        </div>
+        <div class="shop-item">
+          <div class="shop-item-info">
+            <div class="shop-item-icon">🪙</div>
+            <div>
+              <div class="shop-item-name">2,500 Coins</div>
+              <div class="shop-item-sub">Popular</div>
+            </div>
+          </div>
+          <button class="shop-buy-btn" onclick="Shop.buy('coins_2500')">$4.99</button>
+        </div>
+        <div class="shop-item">
+          <div class="shop-item-info">
+            <div class="shop-item-icon">🪙</div>
+            <div>
+              <div class="shop-item-name">5,000 Coins</div>
+              <div class="shop-item-sub">Best value</div>
+            </div>
+          </div>
+          <button class="shop-buy-btn" onclick="Shop.buy('coins_5000')">$9.99</button>
+        </div>
+        <div class="shop-item" style="margin-bottom:14px;">
+          <div class="shop-item-info">
+            <div class="shop-item-icon">🪙</div>
+            <div>
+              <div class="shop-item-name">10,000 Coins</div>
+              <div class="shop-item-sub">Unlock everything</div>
+            </div>
+          </div>
+          <button class="shop-buy-btn" onclick="Shop.buy('coins_10000')">$19.99</button>
+        </div>
+      </div>
+      <div class="shop-footer">
+        <button class="btn btn-secondary" style="margin-bottom:0;" id="shop-back-btn" onclick="Shop.close()">← BACK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAUSE SCREEN -->
+  <div id="screen-pause" class="screen">
+    <div class="panel">
+      <h2>PAUSED</h2>
+      <button class="btn btn-primary" onclick="Game.resume()">RESUME</button>
+      <button class="btn btn-danger" onclick="Game.quit()">QUIT</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="game.js?v=1.6.6"></script>
+<script>
+  // Kill any existing service workers and caches — they cause stale update problems
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
+    caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
+  }
+</script>
+<script data-pplx-inline-edit>
+(function () {
+  if (window === window.top) return;
+
+  const allowedParentOrigins = ["https://www.perplexity.ai","https://perplexity.ai","https://testing.perplexity.ai","https://staging.perplexity.ai","https://*.preview.i.perplexity.ai","http://localhost:3000","http://127.0.0.1:3000","http://localhost:5173","http://127.0.0.1:5173"];
+  const MAX_FONT_BYTES = 500 * 1024;
+  const MAX_TOTAL_FONT_BYTES = 2 * 1024 * 1024;
+  let scrollForwarding = false;
+  let scrollRaf = 0;
+  let trustedTopOrigin = null;
+
+  // Allow entries like "https://*.preview.i.perplexity.ai" — the wildcard
+  // matches a single DNS label (no dots), so "https://*.foo" cannot stretch
+  // across multiple labels.
+  function matchesAllowedOrigin(origin) {
+    if (!origin) return false;
+    for (const entry of allowedParentOrigins) {
+      if (!entry.includes("*")) {
+        if (entry === origin) return true;
+        continue;
+      }
+      const pattern = new RegExp(
+        "^" +
+          entry.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^.]+") +
+          "$",
+      );
+      if (pattern.test(origin)) return true;
+    }
+    return false;
+  }
+
+  // Trust decision: when the sender is same-origin-visible (event.origin is a
+  // real origin like https://www.perplexity.ai) we trust event.origin directly.
+  // When event.origin is "null" (opaque broker srcdoc), we fall back to the
+  // broker's stamped `parentOrigin` to identify the top window. The fallback
+  // is claim-only — we rely on the browser's native `targetOrigin` enforcement
+  // on the response path (see postToTrustedTop) to ensure replies can't be
+  // delivered to anyone but the actual top window of that claimed origin.
+  function getTrustedParentOrigin(event) {
+    const forwardedParentOrigin =
+      typeof event.data.parentOrigin === "string" ? event.data.parentOrigin : null;
+    const parentOrigin = event.origin === "null" ? forwardedParentOrigin : event.origin;
+    return matchesAllowedOrigin(parentOrigin) ? parentOrigin : null;
+  }
+
+  // All responses go to window.top with targetOrigin = the allowlisted origin.
+  // An attacker that iframes us inside their own null-origin broker can claim
+  // any parentOrigin they like, but the browser will drop the reply whenever
+  // the real top's origin doesn't match — so the screenshot never leaves.
+  function postToTrustedTop(message) {
+    if (!trustedTopOrigin) return;
+    try {
+      window.top.postMessage(message, trustedTopOrigin);
+    } catch (_error) {}
+  }
+
+  function inlineAll(original, clone) {
+    if (original.nodeType !== 1 || clone.nodeType !== 1) return;
+
+    try {
+      const computedStyle = getComputedStyle(original);
+      // cssText on a computed style is the serialized declaration in modern
+      // Chromium/Safari — a single read beats enumerating ~400 longhand
+      // properties. Firefox returns "" here, so we fall back on empty.
+      const serialized = computedStyle.cssText;
+      if (serialized) {
+        clone.style.cssText = serialized;
+      } else {
+        const parts = new Array(computedStyle.length);
+        for (let index = 0; index < computedStyle.length; index += 1) {
+          const property = computedStyle[index];
+          parts[index] = `${property}:${computedStyle.getPropertyValue(property)};`;
+        }
+        clone.style.cssText = parts.join("");
+      }
+    } catch (_error) {}
+
+    const originalChildren = original.children;
+    const clonedChildren = clone.children;
+    for (
+      let index = 0;
+      index < originalChildren.length && index < clonedChildren.length;
+      index += 1
+    ) {
+      inlineAll(originalChildren[index], clonedChildren[index]);
+    }
+  }
+
+  function extractFontUrl(srcValue) {
+    const matches = [
+      ...srcValue.matchAll(
+        /url\(["']?([^"')]+)["']?\)(?:\s*format\(["']?([^"')]+)["']?\))?/gi,
+      ),
+    ];
+    if (matches.length === 0) return null;
+    const woff2 = matches.find((m) => m[2] && m[2].toLowerCase().includes("woff2"));
+    if (woff2) return woff2[1];
+    const woff = matches.find((m) => m[2] && m[2].toLowerCase().includes("woff"));
+    if (woff) return woff[1];
+    return matches[0][1];
+  }
+
+  // Cache resolved font URL -> data URI across captures. Fonts on a page
+  // essentially never change, and a batch run emits multiple captures back to
+  // back — without this we'd refetch + re-base64 every time.
+  const fontDataUriCache = new Map();
+  const SRC_DECLARATION_RE = /src\s*:\s*[^;}]+/i;
+
+  async function fetchAsDataUri(url) {
+    if (fontDataUriCache.has(url)) return fontDataUriCache.get(url);
+    let dataUri = null;
+    try {
+      const response = await fetch(url, { mode: "cors", credentials: "omit" });
+      if (response.ok) {
+        const blob = await response.blob();
+        if (blob.size <= MAX_FONT_BYTES) {
+          dataUri = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () =>
+              resolve(typeof reader.result === "string" ? reader.result : null);
+            reader.onerror = () => resolve(null);
+            reader.readAsDataURL(blob);
+          });
+        }
+      }
+    } catch (_error) {
+      dataUri = null;
+    }
+    fontDataUriCache.set(url, dataUri);
+    return dataUri;
+  }
+
+  function collectFontFaceRuleTexts() {
+    const rules = [];
+    for (const sheet of document.styleSheets) {
+      let cssRules;
+      try {
+        cssRules = sheet.cssRules;
+      } catch (_error) {
+        continue;
+      }
+      if (!cssRules) continue;
+      for (const rule of cssRules) {
+        const cssText = rule.cssText || "";
+        if (cssText.startsWith("@font-face")) rules.push(cssText);
+      }
+    }
+    return rules;
+  }
+
+  async function buildInlinedFontCss() {
+    const ruleTexts = collectFontFaceRuleTexts();
+    if (ruleTexts.length === 0) return null;
+
+    const resolved = ruleTexts.map((cssText) => {
+      if (!SRC_DECLARATION_RE.test(cssText)) return null;
+      const srcMatch = cssText.match(/src\s*:\s*([^;}]+)[;}]/i);
+      if (!srcMatch) return null;
+      const url = extractFontUrl(srcMatch[1]);
+      if (!url) return null;
+      try {
+        return { cssText, url: new URL(url, document.baseURI).href };
+      } catch (_error) {
+        return null;
+      }
+    });
+
+    const dataUris = await Promise.all(
+      resolved.map((entry) => (entry ? fetchAsDataUri(entry.url) : Promise.resolve(null))),
+    );
+
+    const inlined = [];
+    let totalBytes = 0;
+    for (let index = 0; index < resolved.length; index += 1) {
+      const entry = resolved[index];
+      const dataUri = dataUris[index];
+      if (!entry || !dataUri) continue;
+      const approxBytes = dataUri.length * 0.75;
+      if (totalBytes + approxBytes > MAX_TOTAL_FONT_BYTES) break;
+      totalBytes += approxBytes;
+      inlined.push(entry.cssText.replace(SRC_DECLARATION_RE, `src: url("${dataUri}")`));
+    }
+    return inlined.length > 0 ? inlined.join("\n") : null;
+  }
+
+  function stripExternal(clone) {
+    const images = clone.querySelectorAll("img");
+    for (let index = 0; index < images.length; index += 1) {
+      const src = images[index].getAttribute("src");
+      if (src && !src.startsWith("data:")) images[index].removeAttribute("src");
+    }
+
+    const elements = clone.querySelectorAll("*");
+    for (let index = 0; index < elements.length; index += 1) {
+      const style = elements[index].style.cssText;
+      if (style && style.includes("url(")) {
+        elements[index].style.cssText = style.replace(
+          /url\(["']?(?!data:)[^)"']*["']?\)/gi,
+          "none",
+        );
+      }
+    }
+  }
+
+  function emitScroll() {
+    scrollRaf = 0;
+    if (!scrollForwarding) return;
+    postToTrustedTop({
+      type: "INLINE_EDIT_SCROLL",
+      scrollX: window.scrollX,
+      scrollY: window.scrollY,
+    });
+  }
+
+  window.addEventListener(
+    "scroll",
+    function () {
+      if (!scrollForwarding || scrollRaf) return;
+      scrollRaf = requestAnimationFrame(emitScroll);
+    },
+    { passive: true, capture: true },
+  );
+
+  async function handleCaptureRequest(event) {
+    const requestId = event.data.requestId;
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    function postResult(dataUrl) {
+      postToTrustedTop({
+        type: "INLINE_EDIT_SCREENSHOT_RESULT",
+        requestId,
+        dataUrl,
+        scrollX,
+        scrollY,
+      });
+    }
+
+    try {
+      // Wait for any pending web fonts to resolve so both inline metrics and
+      // the @font-face inlining below see the same loaded faces.
+      if (document.fonts && document.fonts.ready) {
+        try {
+          await document.fonts.ready;
+        } catch (_error) {}
+      }
+
+      const clone = document.documentElement.cloneNode(true);
+      inlineAll(document.documentElement, clone);
+
+      const removedNodes = clone.querySelectorAll("script,link[rel=\"stylesheet\"],style");
+      for (let index = 0; index < removedNodes.length; index += 1) {
+        removedNodes[index].remove();
+      }
+
+      stripExternal(clone);
+
+      // Re-embed web fonts as data-URI @font-face rules so the SVG rasterizer
+      // can resolve them — external font URLs aren't fetched during
+      // foreignObject rendering, which would otherwise force a fallback face
+      // and change text metrics.
+      const inlinedFontCss = await buildInlinedFontCss();
+      if (inlinedFontCss) {
+        const styleEl = document.createElement("style");
+        styleEl.textContent = inlinedFontCss;
+        const head = clone.querySelector("head");
+        if (head) head.appendChild(styleEl);
+        else clone.insertBefore(styleEl, clone.firstChild);
+      }
+
+      const html = new XMLSerializer().serializeToString(clone);
+      const svg =
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
+        '<foreignObject width="100%" height="100%">' +
+        `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${width}px;height:${height}px;overflow:hidden">` +
+        `<div style="position:relative;left:-${scrollX}px;top:-${scrollY}px">` +
+        html +
+        "</div></div></foreignObject></svg>";
+      const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+      const image = new Image();
+      image.onload = function () {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(image, 0, 0);
+        postResult(canvas.toDataURL("image/png"));
+      };
+      image.onerror = function () {
+        postResult(null);
+      };
+      image.src = svgUrl;
+    } catch (_error) {
+      postResult(null);
+    }
+  }
+
+  window.addEventListener("message", function (event) {
+    if (!event.data) return;
+    // Only accept messages from the direct parent frame. Blocks sibling /
+    // unrelated-window postMessage senders that could otherwise reach us.
+    if (event.source !== window.parent) return;
+
+    const trustedParentOrigin = getTrustedParentOrigin(event);
+    if (!trustedParentOrigin) return;
+    trustedTopOrigin = trustedParentOrigin;
+
+    if (event.data.type === "INLINE_EDIT_SCROLL_START") {
+      scrollForwarding = true;
+      emitScroll();
+      return;
+    }
+
+    if (event.data.type === "INLINE_EDIT_SCROLL_STOP") {
+      scrollForwarding = false;
+      if (scrollRaf) cancelAnimationFrame(scrollRaf);
+      scrollRaf = 0;
+      return;
+    }
+
+    if (event.data.type !== "INLINE_EDIT_CAPTURE_REQUEST") return;
+
+    handleCaptureRequest(event);
+  });
+})();
+
+
+</script></body>
+</html>
