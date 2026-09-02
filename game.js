@@ -165,6 +165,15 @@ const Store = {
       try { window.localStorage.setItem(SAVE_KEY, str); } catch (e) {}
     }
   },
+  // Wipe every tier. Clearing only one leaves the others to resurrect the
+  // save on the next read, since get() falls through them in order.
+  clear() {
+    this._mem = null;
+    Portal.setItem(SAVE_KEY, '');
+    if (this.available()) {
+      try { window.localStorage.removeItem(SAVE_KEY); } catch (e) {}
+    }
+  },
 };
 
 const Save = {
@@ -1748,7 +1757,7 @@ const Garage = {
         showToast(`${car.name} unlocked!`);
         buildGarage();
       } else {
-        showToast('Not enough coins! 🪙');
+        showToast(`${car.name}: need ${car.cost.toLocaleString()} · you have ${Save.data.coins.toLocaleString()}`);
       }
     }
   },
@@ -1792,7 +1801,7 @@ const TrialModal = {
       showToast(`${car.name} unlocked!`);
       buildGarage();
     } else {
-      showToast('Not enough coins! 🪙');
+      showToast(`${car.name}: need ${car.cost.toLocaleString()} · you have ${Save.data.coins.toLocaleString()}`);
     }
   },
   tryFree() {
@@ -1823,6 +1832,9 @@ function applyDevParams() {
   const msgs = [];
 
   if (q.has('reset')) {
+    // Store.clear() first: Save.load() reads straight back out of storage,
+    // so resetting the object alone just reloads the save being cleared.
+    Store.clear();
     Save.data = {};
     Save.load();
     msgs.push('save reset');
