@@ -1806,6 +1806,46 @@ const TrialModal = {
 window.TrialModal = TrialModal;
 window.Garage = Garage;
 
+// ─── DEV HOOKS ───────────────────────────────────────────────
+// Test helpers for grinding-free QA. Gated by hostname so they are inert
+// anywhere the game is actually published: on crazygames.com, on a
+// GameDistribution CDN, or on any other host, isDevHost() is false and the
+// query params below do nothing at all.
+function isDevHost() {
+  const h = location.hostname;
+  return h === 'localhost' || h === '127.0.0.1' || h === '' || h.endsWith('.github.io');
+}
+
+function applyDevParams() {
+  if (!isDevHost()) return;
+  const q = new URLSearchParams(location.search);
+  if (![...q.keys()].some(k => ['coins', 'unlock', 'reset'].includes(k))) return;
+  const msgs = [];
+
+  if (q.has('reset')) {
+    Save.data = {};
+    Save.load();
+    msgs.push('save reset');
+  }
+  if (q.has('coins')) {
+    const n = parseInt(q.get('coins'), 10);
+    if (isFinite(n) && n >= 0) {
+      Save.data.coins = n;
+      Save.data.totalCoins = Math.max(Save.data.totalCoins, n);
+      msgs.push(n.toLocaleString() + ' coins');
+    }
+  }
+  if (q.get('unlock') === 'all') {
+    Save.data.ownedCars = CARS.map(c => c.id);
+    msgs.push('all cars unlocked');
+  }
+  Save.save();
+
+  // Drop the params so a refresh doesn't silently re-apply them.
+  history.replaceState(null, '', location.pathname);
+  if (msgs.length) setTimeout(() => showToast('DEV: ' + msgs.join(' · ')), 400);
+}
+
 // ─── GAME STATE MACHINE ──────────────────────────────────────
 const Game = {
   state: 'title',  // title | playing | paused | dead
@@ -1821,6 +1861,7 @@ const Game = {
 
   init() {
     Save.load();
+    applyDevParams();
     Audio.init();
     Input.init();
     Particles.init();
