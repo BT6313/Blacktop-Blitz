@@ -745,6 +745,19 @@ const Player = {
     this.engineTrail = this.engineTrail.filter(p => p.life > 0);
   },
   // Returns hitbox in world coords, scaled to the active vehicle
+  // Coin pickup uses the vehicle's full visual footprint, not getHitbox().
+  // getHitbox is deliberately shrunk so a near miss doesn't kill you - that
+  // forgiveness is right for collisions and wrong for pickups, where the coin
+  // should register anywhere it visibly touches the vehicle.
+  getPickupBox(carData) {
+    const id = carData ? carData.id : 'red';
+    let vw, vh;
+    if (id === 'monster')       { vw = C.MONSTER_W; vh = C.MONSTER_H; }
+    else if (id === 'snowplow') { vw = C.PLOW_W;    vh = C.PLOW_H; }
+    else                        { vw = C.CAR_W;     vh = C.CAR_H; }
+    return { x: this.drawX - vw/2, y: this.y - vh/2, w: vw, h: vh };
+  },
+
   getHitbox(carData) {
     const id = carData ? carData.id : 'red';
     let vw, vh, px, py;
@@ -1394,11 +1407,19 @@ const Coins = {
     this.list = this.list.filter(c => c.y < H + 30);
   },
   checkCollect() {
+    // Pick up against the active vehicle's real hitbox, not a fixed radius
+    // sized for the starter car. The snowplow is 160px tall, so a centre-
+    // distance test meant coins slid a long way under the plow before they
+    // counted - it read as the truck driving straight over them.
+    const hb = Player.getPickupBox(Game.activeCar);
+    const r = C.COIN_R;
     const collected = [];
     this.list = this.list.filter(c => {
-      const dx = c.x - Player.drawX, dy = c.y - Player.y;
-      const dist = Math.sqrt(dx*dx + dy*dy);
-      if (dist < C.COIN_R + C.CAR_W*0.45) { collected.push(c); return false; }
+      // circle vs axis-aligned box: distance to the box's nearest point
+      const nx = clamp(c.x, hb.x, hb.x + hb.w);
+      const ny = clamp(c.y, hb.y, hb.y + hb.h);
+      const dx = c.x - nx, dy = c.y - ny;
+      if (dx*dx + dy*dy <= r*r) { collected.push(c); return false; }
       return true;
     });
     return collected;
@@ -1655,11 +1676,10 @@ function carIconURL(car) {
     w = C.PLOW_W; h = C.PLOW_H;
     bw = w * 1.20; bh = h * 1.18; dy = h * 0.07;   // room above for the blade
     paint = c => drawSnowplowSemi(c, 0, 0, car.color, car.accent);
-  } else if (car.id === 'truck') {
-    w = C.SEMI_W; h = C.SEMI_H;
-    bw = w * 1.10; bh = h * 1.12; dy = h * 0.04;
-    paint = c => drawSemiTruck(c, 0, 0, car.color, car.accent);
   } else {
+    // Every other car - SEMI included - is drawn with drawPixelCar in play,
+    // so the icon must be that too rather than promising a vehicle you
+    // don't actually get.
     w = C.CAR_W; h = C.CAR_H;
     bw = w * 1.08; bh = h * 1.08; dy = 0;
     paint = c => drawPixelCar(c, 0, 0, C.CAR_W, C.CAR_H, car.color, car.accent);
