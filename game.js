@@ -104,6 +104,30 @@ const Portal = {
     try { this.sdk.game.gameplayStop(); } catch (e) {}
   },
 
+  // CrazyGames' own mute switch. Full implementation requires honouring it,
+  // and it must override any in-game audio preference.
+  getSettings() {
+    if (!this.available) return null;
+    try { return this.sdk.game.settings || null; } catch (e) { return null; }
+  },
+  onSettingsChange(fn) {
+    if (!this.available) return;
+    try { this.sdk.game.addSettingsChangeListener(fn); } catch (e) {}
+  },
+  // Signals the site uses to celebrate and to measure time-to-playable.
+  happytime() {
+    if (!this.available) return;
+    try { this.sdk.game.happytime(); } catch (e) {}
+  },
+  loadingStart() {
+    if (!this.available) return;
+    try { this.sdk.game.loadingStart(); } catch (e) {}
+  },
+  loadingStop() {
+    if (!this.available) return;
+    try { this.sdk.game.loadingStop(); } catch (e) {}
+  },
+
   canRequestAd() {
     if (!this.available) return false;
     return (Date.now() - this._lastAdEndedAt) >= this.AD_COOLDOWN_MS;
@@ -235,12 +259,11 @@ const Save = {
 // Midgame ads are served by CrazyGames. Off-platform this is a no-op and the
 // callback fires immediately, so the game plays identically standalone.
 const AdSystem = {
-  _unmuteAfter: false,
   _resumePlay: false,
 
   show(onClose) {
     const finish = () => {
-      if (this._unmuteAfter) { Audio.muted = false; this._unmuteAfter = false; }
+      Audio.setAdMute(false);   // portal mute, if set, survives this
       if (this._resumePlay) { Game.state = 'playing'; this._resumePlay = false; }
       onClose && onClose();
     };
@@ -250,9 +273,7 @@ const AdSystem = {
     Portal.requestAd('midgame', {
       // CrazyGames requires the game to be muted and paused for the ad's duration.
       adStarted: () => {
-        this._unmuteAfter = !Audio.muted;
-        Audio.muted = true;
-        Audio.stopBGM();
+        Audio.setAdMute(true);
         // The game must also be paused for the ad's duration. Halt the
         // simulation directly rather than via Game.pause(), which would put
         // the pause menu on screen underneath the ad. dt is clamped in
@@ -273,7 +294,18 @@ window.AdSystem = AdSystem;
 const Audio = {
   ctx: null,
   bgm: null,
+  // `muted` is derived, never set directly: the portal's mute switch must
+  // take priority over anything the game itself does (e.g. muting for an ad),
+  // so both sources are tracked separately and combined.
   muted: false,
+  _adMuted: false,
+  _portalMuted: false,
+  _applyMute() {
+    this.muted = this._portalMuted || this._adMuted;
+    if (this.muted) this.stopBGM();
+  },
+  setAdMute(on)     { this._adMuted = on;     this._applyMute(); },
+  setPortalMute(on) { this._portalMuted = on; this._applyMute(); },
   init() {
     try {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1875,6 +1907,10 @@ const Game = {
     Save.load();
     applyDevParams();
     Audio.init();
+    // Honour the site's mute switch from the first frame, and keep following it.
+    const settings = Portal.getSettings();
+    if (settings) Audio.setPortalMute(settings.muteAudio === true);
+    Portal.onSettingsChange(s => Audio.setPortalMute(s && s.muteAudio === true));
     Input.init();
     Particles.init();
     Scenery.init();
@@ -1958,10 +1994,12 @@ const Game = {
     });
     // Finalize
     const finalScore = this.score;
+    const isNewBest = finalScore > 0 && finalScore > Save.getBest();
     const wasTrialMode = this.trialMode;
     const trialCarId = this._trialCarId;
     this.trialMode = false;
     this._trialCarId = null;
+    if (isNewBest) Portal.happytime();   // site-side celebration for a new best
     Save.addScore(finalScore);
     Save.addCoins(this.sessionCoins);
     Save.data.deathCount = (Save.data.deathCount || 0) + 1;
@@ -2117,7 +2155,9 @@ window.showScreen = showScreen;
 document.addEventListener('DOMContentLoaded', async () => {
   // Must finish before Game.init() -> Save.load() reads stored progress.
   await Portal.init();
+  Portal.loadingStart();
   Game.init();
+  Portal.loadingStop();
   // Pause on mobile back button / visibility change
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && Game.state === 'playing') Game.pause();
