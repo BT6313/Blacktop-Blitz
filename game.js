@@ -41,7 +41,7 @@ const CARS = [
   { id: 'police',   name: 'PURSUIT',     emoji: '🚔',  cost: 500,   color: '#6688ff', accent: '#aabbff', ability: null },
   { id: 'fire',     name: 'FIRETRUCK',   emoji: '🚒',  cost: 1000,  color: '#ff3300', accent: '#ff7766', ability: null },
   { id: 'sport',    name: 'RACER',       emoji: '🏎️', cost: 2000,  color: '#cc44ff', accent: '#ee88ff', ability: null },
-  { id: 'truck',    name: 'SEMI',        emoji: '🚛',  cost: 3500,  color: '#888899', accent: '#aabbcc', ability: null },
+  { id: 'truck',    name: 'PHANTOM',     emoji: '🚛',  cost: 3500,  color: '#888899', accent: '#aabbcc', ability: null },
   { id: 'taxi',     name: 'TAXI PRO',    emoji: '🛻',  cost: 5000,  color: '#ffaa00', accent: '#ffcc55', ability: null },
   { id: 'monster',  name: 'MONSTER',     emoji: '🚙',  cost: 8000,  color: '#cc6600', accent: '#ff9933', ability: 'crush_cars',
     desc: 'Crushes cars! Dies on semis.' },
@@ -1745,7 +1745,7 @@ const Garage = {
     } else {
       if (Save.buyCar(id)) {
         Save.selectCar(id);
-        showToast(`${car.emoji} ${car.name} unlocked!`);
+        showToast(`${car.name} unlocked!`);
         buildGarage();
       } else {
         showToast('Not enough coins! 🪙');
@@ -1789,7 +1789,7 @@ const TrialModal = {
     if (!car) return;
     if (Save.buyCar(id)) {
       Save.selectCar(id);
-      showToast(`${car.emoji} ${car.name} unlocked!`);
+      showToast(`${car.name} unlocked!`);
       buildGarage();
     } else {
       showToast('Not enough coins! 🪙');
@@ -1925,7 +1925,7 @@ const Game = {
         buildGarage();
         showScreen('screen-garage');
         if (trialCar) {
-          showToast(`${trialCar.emoji} Buy ${trialCar.name} for ${trialCar.cost.toLocaleString()} coins to keep it!`);
+          showToast(`Buy ${trialCar.name} for ${trialCar.cost.toLocaleString()} coins to keep it!`);
         }
       } else {
         document.getElementById('go-score').textContent = finalScore.toLocaleString();
@@ -1959,7 +1959,9 @@ const Game = {
       btn.onclick = null;
       return;
     }
-    btn.textContent = `${candidate.emoji} TRY ${candidate.name} — FREE`;
+    btn.innerHTML =
+      `<img class="car-icon car-icon-sm" src="${carIconURL(candidate)}" alt="" />` +
+      `<span>TRY ${candidate.name} — FREE</span>`;
     btn.style.display = '';
     btn.onclick = () => {
       btn.style.display = 'none';
