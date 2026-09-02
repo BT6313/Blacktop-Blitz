@@ -57,5 +57,17 @@ Driving / Arcade
 - [x] Avoids browser-reserved keys as the only binding (P added alongside Escape)
 - [x] Portrait, touch-first, keyboard supported
 - [x] Cover art (covers/ — 1920x1080, 800x1200, 800x800)
-- [ ] Tested on a real phone
+- [x] Tested on a real phone: menu buttons, garage scrolling, purchases
+- [ ] Confirm snowplow coin pickup on device (fix shipped, unverified by hand)
 - [ ] Sitelock (deliberately deferred until the serving domains are known)
+
+## Known follow-ups (post-submission)
+- Car traits pass: 8 of 11 cars are cosmetic-only, so the garage grind pays
+  out in nothing. One distinct trait each (ECO gentler ramp, PURSUIT wider
+  pickup, FIRETRUCK one free hit, RACER bigger nitro, PHANTOM higher top
+  speed, TAXI PRO +25% coins) turns the progression into a reason to play.
+- Coin store is not possible on these portals: CrazyGames IAP is invite-only
+  via their Xsolla account, and own-payment flows are forbidden. The route
+  for that is a Google Play wrapper build using Play Billing.
+- Dev hooks (?coins / ?unlock / ?reset) are hostname-gated to localhost and
+  *.github.io, inert on any published host.
