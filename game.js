@@ -508,14 +508,19 @@ const Input = {
   _touchLeft: false, _touchRight: false,
   init() {
     document.addEventListener('keydown', e => {
-      if (e.code === 'ArrowLeft')  { this.leftDown = true;  this.left = true; }
-      if (e.code === 'ArrowRight') { this.rightDown = true; this.right = true; }
+      // e.code is physical-position based, so arrows and A/D land in the same
+      // place on AZERTY as on QWERTY.
+      if (e.code === 'ArrowLeft'  || e.code === 'KeyA') { this.leftDown = true;  this.left = true; }
+      if (e.code === 'ArrowRight' || e.code === 'KeyD') { this.rightDown = true; this.right = true; }
       if (e.code === 'Space') { e.preventDefault(); this.nitro = true; }
-      if (e.code === 'Escape' && Game.state === 'playing') Game.pause();
+      // P is the documented pause key: Escape also exits fullscreen on the
+      // portals, so it can't be the only way to pause. Escape still pauses,
+      // since dropping out of fullscreen is a reasonable moment to stop.
+      if ((e.code === 'KeyP' || e.code === 'Escape') && Game.state === 'playing') Game.pause();
     });
     document.addEventListener('keyup', e => {
-      if (e.code === 'ArrowLeft')  { this.leftDown = false; this.left = false; }
-      if (e.code === 'ArrowRight') { this.rightDown = false; this.right = false; }
+      if (e.code === 'ArrowLeft'  || e.code === 'KeyA') { this.leftDown = false; this.left = false; }
+      if (e.code === 'ArrowRight' || e.code === 'KeyD') { this.rightDown = false; this.right = false; }
       if (e.code === 'Space') this.nitro = false;
     });
     // Touch zones
