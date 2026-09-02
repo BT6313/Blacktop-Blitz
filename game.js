@@ -63,9 +63,16 @@ const Portal = {
   _lastAdEndedAt: 0,
   AD_COOLDOWN_MS: 3 * 60 * 1000,   // CrazyGames guidance: ~3 min between midgame ads
 
+  kind: null,              // 'crazygames' | 'gamedistribution' | null
+
   async init() {
+    if (await this._initCrazyGames()) { this.kind = 'crazygames'; return; }
+    if (this._initGameDistribution()) { this.kind = 'gamedistribution'; this._bindGD(); return; }
+  },
+
+  async _initCrazyGames() {
     const sdk = window.CrazyGames && window.CrazyGames.SDK;
-    if (!sdk) return;              // script blocked, offline, or standalone build
+    if (!sdk) return false;        // script blocked, offline, or a non-CG build
     try {
       // Don't let a hung SDK stop the game from booting.
       await Promise.race([
@@ -73,14 +80,27 @@ const Portal = {
         new Promise((_, rej) => setTimeout(() => rej(new Error('sdk init timeout')), 5000)),
       ]);
       this.env = sdk.environment || 'disabled';
-      if (this.env === 'disabled') return;
+      if (this.env === 'disabled') return false;
       this.sdk = sdk;
+      return true;
     } catch (e) {
       this.sdk = null;
+      return false;
     }
   },
 
-  get available() { return this.sdk !== null; },
+  // GameDistribution drives the game rather than the other way round: it fires
+  // SDK_GAME_PAUSE when an ad takes over and SDK_GAME_START when it hands back,
+  // so the work here is responding to those rather than calling anything.
+  _initGameDistribution() {
+    if (typeof window.gdsdk === 'undefined' && !window.GD_OPTIONS) return false;
+    this.env = 'gamedistribution';
+    return true;
+  },
+
+  get available() { return this.sdk !== null || this.kind === 'gamedistribution'; },
+  get isCrazyGames() { return this.kind === 'crazygames'; },
+  get isGD() { return this.kind === 'gamedistribution'; },
 
   // — Cross-device save storage. Preferred over localStorage on-platform
   //   because CrazyGames syncs it across a signed-in player's devices.
@@ -136,6 +156,22 @@ const Portal = {
   requestAd(type, callbacks) {
     if (!this.available) { callbacks.adError && callbacks.adError('unavailable'); return; }
     const done = (fn) => (arg) => { this._lastAdEndedAt = Date.now(); fn && fn(arg); };
+
+    if (this.isGD) {
+      // GameDistribution drives pause/resume itself through SDK_GAME_PAUSE and
+      // SDK_GAME_START, so there is no adStarted callback to hook - those
+      // events arrive via _gdEvent below. showAd() resolves when the ad is done.
+      try {
+        const p = (type === 'rewarded')
+          ? window.gdsdk.preloadAd('rewarded').then(() => window.gdsdk.showAd('rewarded'))
+          : window.gdsdk.showAd();
+        Promise.resolve(p).then(done(callbacks.adFinished), done(callbacks.adError));
+      } catch (e) {
+        done(callbacks.adError)(e);
+      }
+      return;
+    }
+
     try {
       this.sdk.ad.requestAd(type, {
         adStarted:  callbacks.adStarted,
@@ -145,6 +181,28 @@ const Portal = {
     } catch (e) {
       callbacks.adError && callbacks.adError(e);
     }
+  },
+
+  // GameDistribution posts lifecycle events at us rather than taking calls.
+  // GD_OPTIONS in the page head buffers anything that lands before this runs.
+  _bindGD() {
+    const handle = (e) => {
+      const name = e && e.name;
+      if (name === 'SDK_GAME_PAUSE') {
+        Audio.setAdMute(true);
+        AdSystem._resumePlay = (Game.state === 'playing');
+        if (AdSystem._resumePlay) Game.state = 'paused';
+      } else if (name === 'SDK_GAME_START') {
+        Audio.setAdMute(false);
+        if (AdSystem._resumePlay) { Game.state = 'playing'; AdSystem._resumePlay = false; }
+      } else if (name === 'SDK_REWARDED_WATCH_COMPLETE') {
+        AdSystem._grantReward();
+      }
+    };
+    window.__gdEvent = handle;
+    const queued = window.__gdEvents || [];
+    window.__gdEvents = [];
+    queued.forEach(handle);
   },
 };
 window.Portal = Portal;
@@ -286,6 +344,64 @@ const AdSystem = {
       // here. None of them should cost the player their game-over screen.
       adError: finish,
     });
+  },
+
+  // --- Interstitial deferred to a button press -----------------------------
+  // GameDistribution requires ads to be triggered by user input and outside
+  // gameplay. Firing one the instant the player dies breaks both rules, so on
+  // GD the ad is queued at death and spent when the player taps PLAY AGAIN.
+  pending: false,
+
+  queueOrShow(onClose) {
+    if (Portal.isGD) { this.pending = true; onClose && onClose(); return; }
+    this.show(onClose);
+  },
+
+  // Returns true if it took over; Game.start() re-runs after the ad finishes.
+  consumePending(resume) {
+    if (!this.pending) return false;
+    this.pending = false;
+    if (!Portal.canRequestAd()) return false;
+    this.show(resume);
+    return true;
+  },
+
+  // --- Rewarded: double the coins from the run just finished ---------------
+  _rewardPending: 0,
+
+  offerDoubleCoins() {
+    const btn = document.getElementById('go-reward-btn');
+    if (!btn) return;
+    const earned = Game.sessionCoins;
+    if (!Portal.available || earned <= 0) { btn.style.display = 'none'; btn.onclick = null; return; }
+    btn.textContent = '📺 WATCH AD · 2x COINS';
+    btn.style.display = '';
+    btn.onclick = () => {
+      btn.style.display = 'none';
+      btn.onclick = null;
+      this._rewardPending = earned;
+      Portal.requestAd('rewarded', {
+        adStarted: () => {
+          Audio.setAdMute(true);
+          this._resumePlay = (Game.state === 'playing');
+          if (this._resumePlay) Game.state = 'paused';
+        },
+        // CrazyGames signals success by finishing; GD fires
+        // SDK_REWARDED_WATCH_COMPLETE, handled in Portal._bindGD.
+        adFinished: () => { Audio.setAdMute(false); if (!Portal.isGD) this._grantReward(); },
+        adError: () => { Audio.setAdMute(false); this._rewardPending = 0; },
+      });
+    };
+  },
+
+  _grantReward() {
+    const bonus = this._rewardPending;
+    this._rewardPending = 0;
+    if (bonus <= 0) return;
+    Save.addCoins(bonus);
+    const el = document.getElementById('go-coins');
+    if (el) el.textContent = '🪙 +' + (bonus*2).toLocaleString() + ' coins collected (2x)';
+    showToast('+' + bonus.toLocaleString() + ' bonus coins!');
   },
 };
 window.AdSystem = AdSystem;
@@ -1931,6 +2047,9 @@ const Game = {
   },
 
   start() {
+    // A queued GD interstitial is spent here, where the call originates from a
+    // real button press and gameplay has not begun.
+    if (AdSystem.consumePending(() => Game.start())) return;
     Audio.resume();
     this.score = 0;
     this.sessionCoins = 0;
@@ -2023,9 +2142,10 @@ const Game = {
         document.getElementById('go-best').textContent = 'BEST: ' + Save.getBest().toLocaleString();
         document.getElementById('go-coins').textContent = `🪙 +${this.sessionCoins} coins collected`;
         this._maybeOfferTrial();
+        AdSystem.offerDoubleCoins();
         if (showAd) {
-          // Show interstitial; game-over screen appears after ad is dismissed
-          AdSystem.show(() => showScreen('screen-gameover'));
+          // On CrazyGames this shows now; on GD it is queued for PLAY AGAIN.
+          AdSystem.queueOrShow(() => showScreen('screen-gameover'));
         } else {
           showScreen('screen-gameover');
         }

@@ -50,6 +50,14 @@
     /* Buttons need their own touch-action: body sets none, which suppresses
        the tap gesture that produces a click. */
     .btn, button { touch-action: manipulation; }
+    .btn-reward {
+      background: linear-gradient(135deg, #7a5cff, #b18cff);
+      color: #fff;
+      font-weight: 800;
+      border: none;
+      font-size: 0.78rem;
+      letter-spacing: 0.02em;
+    }
     .btn-trial {
       background: linear-gradient(135deg, #ff9933, #ffcc00);
       color: #1a0d00;
@@ -532,6 +540,8 @@
       <div id="go-coins">🪙 +0 coins collected</div>
       <!-- Free-trial upsell for the crush vehicles; shown by _maybeOfferTrial() -->
       <button id="go-trial-btn" class="btn btn-trial" style="display:none;"></button>
+      <!-- Rewarded ad offer; shown by AdSystem.offerDoubleCoins() -->
+      <button id="go-reward-btn" class="btn btn-reward" style="display:none;"></button>
       <button class="btn btn-primary" onclick="Game.start()">PLAY AGAIN</button>
       <button class="btn btn-secondary" onclick="showScreen('screen-title')">MENU</button>
     </div>
@@ -598,6 +608,6 @@
 
 </div>
 
-<script src="game.js?v=1.8.1"></script>
+<script src="game.js?v=1.9.0"></script>
 </body>
 </html>
