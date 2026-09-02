@@ -33,6 +33,9 @@ you can survive when the road stops being survivable.
 - Collect 5 coins in a row for a COMBO x2
 - Look for the FREE TRY on the Monster Truck and Snowplow in the Garage
 
+## Cover images
+`covers/cover-landscape-1920x1080.png`, `covers/cover-portrait-800x1200.png`, `covers/cover-square-800x800.png`
+
 ## Suggested tags
 driving, car, arcade, endless, traffic, skill, casual, 1 player, mobile, truck
 
@@ -53,6 +56,6 @@ Driving / Arcade
 - [x] Works with the SDK absent (verified live on GitHub Pages)
 - [x] Avoids browser-reserved keys as the only binding (P added alongside Escape)
 - [x] Portrait, touch-first, keyboard supported
-- [ ] Thumbnail / cover art
+- [x] Cover art (covers/ — 1920x1080, 800x1200, 800x800)
 - [ ] Tested on a real phone
 - [ ] Sitelock (deliberately deferred until the serving domains are known)
