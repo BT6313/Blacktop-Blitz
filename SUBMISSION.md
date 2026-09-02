@@ -58,8 +58,15 @@ Driving / Arcade
 - [x] Portrait, touch-first, keyboard supported
 - [x] Cover art (covers/ — 1920x1080, 800x1200, 800x800)
 - [x] Tested on a real phone: menu buttons, garage scrolling, purchases
-- [ ] Confirm snowplow coin pickup on device (fix shipped, unverified by hand)
+- [x] Confirm snowplow coin pickup on device
 - [ ] Sitelock (deliberately deferred until the serving domains are known)
+
+## Portal differences worth remembering
+- CrazyGames: you call the SDK, it calls back. Ads fire on death. Has a
+  cross-device save API (data module) and a mute switch you must honour.
+- GameDistribution: it pushes SDK_GAME_PAUSE/SDK_GAME_START at you. Ads must
+  come from user input outside gameplay, so the interstitial is queued at
+  death and spent on PLAY AGAIN. No save API - localStorage only.
 
 ## Known follow-ups (post-submission)
 - Car traits pass: 8 of 11 cars are cosmetic-only, so the garage grind pays
