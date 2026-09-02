@@ -52,6 +52,79 @@ const CARS = [
 const ENEMY_EMOJIS = ['🚙','🚐','🚑','🚓','🚚','🚌','🚎','🏎️','🚜'];
 
 // ─── PERSISTENT STATE ────────────────────────────────────────
+// ─── CRAZYGAMES PORTAL BRIDGE ────────────────────────────────
+// Everything here degrades to a no-op when the SDK is absent or the game is
+// running off-platform (GitHub Pages, itch.io, a local file). The SDK throws
+// on every call when environment is "disabled", so nothing may be called
+// without checking `available` first.
+const Portal = {
+  sdk: null,
+  env: 'unknown',          // 'local' | 'crazygames' | 'disabled' | 'unknown'
+  _lastAdEndedAt: 0,
+  AD_COOLDOWN_MS: 3 * 60 * 1000,   // CrazyGames guidance: ~3 min between midgame ads
+
+  async init() {
+    const sdk = window.CrazyGames && window.CrazyGames.SDK;
+    if (!sdk) return;              // script blocked, offline, or standalone build
+    try {
+      // Don't let a hung SDK stop the game from booting.
+      await Promise.race([
+        sdk.init(),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('sdk init timeout')), 5000)),
+      ]);
+      this.env = sdk.environment || 'disabled';
+      if (this.env === 'disabled') return;
+      this.sdk = sdk;
+    } catch (e) {
+      this.sdk = null;
+    }
+  },
+
+  get available() { return this.sdk !== null; },
+
+  // — Cross-device save storage. Preferred over localStorage on-platform
+  //   because CrazyGames syncs it across a signed-in player's devices.
+  getItem(key) {
+    if (!this.available) return null;
+    try { return this.sdk.data.getItem(key); } catch (e) { return null; }
+  },
+  setItem(key, value) {
+    if (!this.available) return false;
+    try { this.sdk.data.setItem(key, value); return true; } catch (e) { return false; }
+  },
+
+  // — Gameplay signals. CrazyGames measures load time up to gameplayStart,
+  //   so it must fire at real gameplay, not on the loading screen.
+  gameplayStart() {
+    if (!this.available) return;
+    try { this.sdk.game.gameplayStart(); } catch (e) {}
+  },
+  gameplayStop() {
+    if (!this.available) return;
+    try { this.sdk.game.gameplayStop(); } catch (e) {}
+  },
+
+  canRequestAd() {
+    if (!this.available) return false;
+    return (Date.now() - this._lastAdEndedAt) >= this.AD_COOLDOWN_MS;
+  },
+
+  requestAd(type, callbacks) {
+    if (!this.available) { callbacks.adError && callbacks.adError('unavailable'); return; }
+    const done = (fn) => (arg) => { this._lastAdEndedAt = Date.now(); fn && fn(arg); };
+    try {
+      this.sdk.ad.requestAd(type, {
+        adStarted:  callbacks.adStarted,
+        adFinished: done(callbacks.adFinished),
+        adError:    done(callbacks.adError),
+      });
+    } catch (e) {
+      callbacks.adError && callbacks.adError(e);
+    }
+  },
+};
+window.Portal = Portal;
+
 const SAVE_KEY = 'blacktopBlitz.save.v1';
 
 // Storage shim: localStorage when it works, in-memory when it doesn't
@@ -71,14 +144,23 @@ const Store = {
     }
     return this._ok;
   },
+  // Read order: CrazyGames (syncs across the player's devices) -> localStorage -> memory
   get() {
+    const portal = Portal.getItem(SAVE_KEY);
+    if (portal !== null && portal !== undefined) return portal;
     if (this.available()) {
-      try { return window.localStorage.getItem(SAVE_KEY); } catch (e) {}
+      try {
+        const local = window.localStorage.getItem(SAVE_KEY);
+        if (local !== null) return local;
+      } catch (e) {}
     }
     return this._mem;
   },
+  // Write everywhere available: CrazyGames is authoritative on-platform, but a
+  // local copy keeps progress if the SDK is unreachable on a later visit.
   set(str) {
     this._mem = str;
+    Portal.setItem(SAVE_KEY, str);
     if (this.available()) {
       try { window.localStorage.setItem(SAVE_KEY, str); } catch (e) {}
     }
@@ -110,7 +192,6 @@ const Save = {
       ? d.triedCars.filter(id => CARS.some(c => c.id === id)) : [];
     // Never leave activeCar pointing at a car the player doesn't own
     if (!d.ownedCars.includes(d.activeCar)) d.activeCar = 'red';
-    d.adsFree = d.adsFree === true;
   },
   save() {
     try { Store.set(JSON.stringify(this.data)); } catch(e) {}
@@ -139,112 +220,45 @@ const Save = {
     this.save();
   },
   getBest() { return this.data.highScores[0] || 0; },
-  removeAds() {
-    this.data.adsFree = true;
-    this.save();
-  },
 };
 
-// ─── AD SYSTEM ──────────────────────────────────────────────
+// ─── ADS ─────────────────────────────────────────────────────
+// Midgame ads are served by CrazyGames. Off-platform this is a no-op and the
+// callback fires immediately, so the game plays identically standalone.
 const AdSystem = {
-  _timer: null,
-  _secs: 5,
-  _afterClose: null,   // callback to run when ad is dismissed
+  _unmuteAfter: false,
+  _resumePlay: false,
 
-  // Show an interstitial. onClose is called when the player dismisses it.
   show(onClose) {
-    if (Save.data.adsFree) { onClose && onClose(); return; }
-    this._afterClose = onClose || null;
-    this._secs = 5;
-    const countEl = document.getElementById('ad-countdown');
-    const closeBtn = document.getElementById('ad-close-btn');
-    countEl.textContent = 'Closing in 5…';
-    closeBtn.classList.remove('ready');
-    showScreen('screen-ad');
-    clearInterval(this._timer);
-    this._timer = setInterval(() => {
-      this._secs--;
-      if (this._secs > 0) {
-        countEl.textContent = `Closing in ${this._secs}…`;
-      } else {
-        countEl.textContent = 'Ready to close!';
-        closeBtn.classList.add('ready');
-        clearInterval(this._timer);
-      }
-    }, 1000);
-  },
-
-  close() {
-    clearInterval(this._timer);
-    const cb = this._afterClose;
-    this._afterClose = null;
-    if (cb) cb(); else showScreen('screen-gameover');
+    const finish = () => {
+      if (this._unmuteAfter) { Audio.muted = false; this._unmuteAfter = false; }
+      if (this._resumePlay) { Game.state = 'playing'; this._resumePlay = false; }
+      onClose && onClose();
+    };
+    // canRequestAd() covers both "no SDK" and the ~3 min cooldown; requesting
+    // inside the cooldown just earns an adCooldown error.
+    if (!Portal.canRequestAd()) { finish(); return; }
+    Portal.requestAd('midgame', {
+      // CrazyGames requires the game to be muted and paused for the ad's duration.
+      adStarted: () => {
+        this._unmuteAfter = !Audio.muted;
+        Audio.muted = true;
+        Audio.stopBGM();
+        // The game must also be paused for the ad's duration. Halt the
+        // simulation directly rather than via Game.pause(), which would put
+        // the pause menu on screen underneath the ad. dt is clamped in
+        // _loop(), so resuming can't produce a time spike.
+        this._resumePlay = (Game.state === 'playing');
+        if (this._resumePlay) Game.state = 'paused';
+      },
+      adFinished: finish,
+      // adblock / unfilled / adCooldown / ads-off-during-Basic-Launch all land
+      // here. None of them should cost the player their game-over screen.
+      adError: finish,
+    });
   },
 };
 window.AdSystem = AdSystem;
-
-// ─── SHOP ──────────────────────────────────────────────────
-const Shop = {
-  _returnScreen: 'screen-title',
-
-  open(returnScreen) {
-    this._returnScreen = returnScreen || 'screen-title';
-    this._refresh();
-    showScreen('screen-shop');
-  },
-
-  close() {
-    showScreen(this._returnScreen);
-    // Rebuild garage coins tally if returning there
-    if (this._returnScreen === 'screen-garage') buildGarage();
-  },
-
-  _refresh() {
-    document.getElementById('shop-coins').textContent = `🪙 ${Save.data.coins.toLocaleString()} coins`;
-    // Update No-Ads button state
-    const btn = document.getElementById('shop-btn-noads');
-    if (Save.data.adsFree) {
-      btn.textContent = '✓ Purchased';
-      btn.classList.add('owned');
-      btn.onclick = null;
-    } else {
-      btn.textContent = '$4.99';
-      btn.classList.remove('owned');
-      btn.onclick = () => Shop.buy('noads');
-    }
-  },
-
-  buy(productId) {
-    // —— MOCK PURCHASE ——
-    // In production: launch Stripe / App Store / Play Billing here
-    // and call _fulfill(productId) only on confirmed payment.
-    const confirm = window.confirm(
-      {
-        noads:       'Purchase \u201cNo Ads\u201d for $4.99? (mock — no charge)',
-        coins_1000:  'Purchase 1,000 coins for $1.99? (mock — no charge)',
-        coins_2500:  'Purchase 2,500 coins for $4.99? (mock — no charge)',
-        coins_5000:  'Purchase 5,000 coins for $9.99? (mock — no charge)',
-        coins_10000: 'Purchase 10,000 coins for $19.99? (mock — no charge)',
-      }[productId] || 'Confirm purchase?'
-    );
-    if (!confirm) return;
-    this._fulfill(productId);
-  },
-
-  _fulfill(productId) {
-    const coinAmounts = { coins_1000: 1000, coins_2500: 2500, coins_5000: 5000, coins_10000: 10000 };
-    if (productId === 'noads') {
-      Save.removeAds();
-      showToast('🚫 Ads removed! Thank you! ❤️');
-    } else if (coinAmounts[productId]) {
-      Save.addCoins(coinAmounts[productId]);
-      showToast(`🪙 +${coinAmounts[productId].toLocaleString()} coins added!`);
-    }
-    this._refresh();
-    if (this._returnScreen === 'screen-garage') buildGarage();
-  },
-};
-window.Shop = Shop;
 
 // ─── AUDIO ENGINE ────────────────────────────────────────────
 const Audio = {
@@ -1624,7 +1638,7 @@ function buildGarage() {
       costLabel = '🪙 ' + car.cost;
     }
     const trialBadge = trialable && !tried
-      ? `<div style="margin-top:5px;background:#00ffc8;color:#000;font-size:0.6rem;font-weight:900;letter-spacing:0.06em;padding:3px 7px;border-radius:20px;display:inline-block;">1 FREE TRY</div>`
+      ? `<div style="margin-top:5px;background:#00ffc8;color:#000;font-size:0.6rem;font-weight:900;letter-spacing:0.06em;padding:3px 6px;border-radius:20px;display:inline-block;white-space:nowrap;max-width:100%;">1 FREE TRY</div>`
       : (tried ? `<div style="margin-top:5px;color:#00ffc8;font-size:0.6rem;font-weight:700;letter-spacing:0.06em;">✓ TRIED</div>` : '');
     return `<div class="car-card${selected?' selected':''}${!owned?' locked':''}"
       onclick="Garage.tap('${car.id}')">
@@ -1763,22 +1777,26 @@ const Game = {
     showScreen(null);
     showHUD(true);
     Input.enableTouchZones(true);
+    Portal.gameplayStart();
     this.state = 'playing';
   },
 
   pause() {
     if (this.state !== 'playing') return;
     this.state = 'paused';
+    Portal.gameplayStop();
     showScreen('screen-pause');
   },
 
   resume() {
     this.state = 'playing';
+    Portal.gameplayStart();
     showScreen(null);
   },
 
   quit() {
     this.state = 'title';
+    Portal.gameplayStop();
     showHUD(false);
     Input.enableTouchZones(false);
     Input.reset();
@@ -1789,6 +1807,7 @@ const Game = {
     if (!Player.alive) return;
     Player.alive = false;
     this.state = 'dead';
+    Portal.gameplayStop();
     Audio.stopBGM();
     Audio.playCrash();
     flashScreen();
@@ -1811,7 +1830,7 @@ const Game = {
     Save.addCoins(this.sessionCoins);
     Save.data.deathCount = (Save.data.deathCount || 0) + 1;
     Save.save();
-    const showAd = !Save.data.adsFree && (Save.data.deathCount % 5 === 0);
+    const showAd = (Save.data.deathCount % 5 === 0);
     setTimeout(() => {
       showHUD(false);
       Input.enableTouchZones(false);
@@ -1957,7 +1976,9 @@ window.Game = Game;
 window.showScreen = showScreen;
 
 // ─── BOOT ────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  // Must finish before Game.init() -> Save.load() reads stored progress.
+  await Portal.init();
   Game.init();
   // Pause on mobile back button / visibility change
   document.addEventListener('visibilitychange', () => {

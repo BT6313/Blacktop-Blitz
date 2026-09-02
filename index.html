@@ -13,6 +13,8 @@
   <meta name="description" content="Blacktop Blitz — dodge traffic, crush rivals, and go for the high score!" />
   <title>Blacktop Blitz</title>
   <link rel="manifest" href="manifest.json" />
+  <!-- CrazyGames SDK. Absent/blocked is handled: the game runs standalone. -->
+  <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <link rel="icon" href="icons/icon-192.png" />
   <style>
@@ -395,162 +397,13 @@
     .scroll-panel {
       max-height: 55vh;
       overflow-y: auto;
+      overflow-x: hidden;   /* grid rounding overflows by ~2px and raises a scrollbar */
       -webkit-overflow-scrolling: touch;
     }
     .scroll-panel::-webkit-scrollbar { width: 4px; }
     .scroll-panel::-webkit-scrollbar-track { background: transparent; }
     .scroll-panel::-webkit-scrollbar-thumb { background: rgba(0,255,200,0.2); border-radius: 2px; }
 
-    /* ── AD INTERSTITIAL ── */
-    #screen-ad .ad-box {
-      background: rgba(13,13,26,0.97);
-      border: 1px solid rgba(0,255,200,0.18);
-      border-radius: 18px;
-      padding: 36px 32px 28px;
-      width: min(360px, 90vw);
-      text-align: center;
-      backdrop-filter: blur(16px);
-    }
-    .ad-label {
-      font-family: 'Azeret Mono', monospace;
-      font-size: 0.6rem;
-      letter-spacing: 0.22em;
-      color: rgba(255,255,255,0.3);
-      text-transform: uppercase;
-      margin-bottom: 12px;
-    }
-    .ad-placeholder {
-      background: rgba(255,255,255,0.04);
-      border: 1px dashed rgba(255,255,255,0.12);
-      border-radius: 10px;
-      height: 160px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      margin-bottom: 18px;
-      color: rgba(255,255,255,0.25);
-      font-size: 0.8rem;
-    }
-    .ad-placeholder .ad-icon { font-size: 2.4rem; opacity: 0.4; }
-    #ad-countdown {
-      font-family: 'Azeret Mono', monospace;
-      font-size: 0.85rem;
-      color: rgba(0,255,200,0.55);
-      margin-bottom: 16px;
-      letter-spacing: 0.08em;
-    }
-    #ad-close-btn {
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.3s;
-    }
-    #ad-close-btn.ready {
-      opacity: 1;
-      pointer-events: auto;
-    }
-    .ad-skip-note {
-      font-size: 0.7rem;
-      color: rgba(255,255,255,0.25);
-      margin-top: 8px;
-    }
-
-    /* ── MARKETPLACE ── */
-    #screen-shop .shop-panel {
-      background: rgba(13,13,26,0.95);
-      border: 1px solid rgba(0,255,200,0.18);
-      border-radius: 18px;
-      width: min(360px, 90vw);
-      max-height: 88vh;
-      display: flex;
-      flex-direction: column;
-      backdrop-filter: blur(16px);
-      overflow: hidden;
-    }
-    .shop-header {
-      flex-shrink: 0;
-      padding: 22px 28px 10px;
-      text-align: center;
-    }
-    .shop-scroll {
-      flex: 1;
-      min-height: 0;
-      overflow-y: auto;
-      padding: 0 20px;
-      -webkit-overflow-scrolling: touch;
-    }
-    .shop-scroll::-webkit-scrollbar { width: 4px; }
-    .shop-scroll::-webkit-scrollbar-thumb { background: rgba(0,255,200,0.2); border-radius: 2px; }
-    .shop-footer {
-      flex-shrink: 0;
-      padding: 10px 20px 18px;
-    }
-    .shop-section-label {
-      font-family: 'Azeret Mono', monospace;
-      font-size: 0.6rem;
-      letter-spacing: 0.2em;
-      color: rgba(0,255,200,0.45);
-      text-transform: uppercase;
-      margin: 14px 0 8px;
-    }
-    .shop-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 12px;
-      padding: 13px 14px;
-      margin-bottom: 8px;
-      gap: 10px;
-    }
-    .shop-item-info {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex: 1;
-    }
-    .shop-item-icon { font-size: 1.6rem; flex-shrink: 0; }
-    .shop-item-name {
-      font-weight: 700;
-      font-size: 0.9rem;
-      color: #e0e0f0;
-    }
-    .shop-item-sub {
-      font-size: 0.7rem;
-      color: rgba(255,255,255,0.35);
-      margin-top: 1px;
-    }
-    .shop-buy-btn {
-      flex-shrink: 0;
-      background: #00ffc8;
-      color: #0d0d1a;
-      border: none;
-      border-radius: 50px;
-      padding: 8px 16px;
-      font-family: 'Plus Jakarta Sans', sans-serif;
-      font-size: 0.8rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition: transform 0.1s, background 0.1s;
-      white-space: nowrap;
-    }
-    .shop-buy-btn:active { transform: scale(0.94); }
-    .shop-buy-btn:hover { background: #33ffda; }
-    .shop-buy-btn.owned {
-      background: rgba(0,255,200,0.12);
-      color: #00ffc8;
-      border: 1px solid rgba(0,255,200,0.25);
-      cursor: default;
-    }
-    .shop-coins-display {
-      font-family: 'Azeret Mono', monospace;
-      font-size: 0.95rem;
-      color: #ffd700;
-      text-align: center;
-      margin-bottom: 6px;
-    }
   </style>
 </head>
 <body>
@@ -595,7 +448,6 @@
       <div style="display:flex;gap:8px;">
         <button class="btn btn-secondary" style="margin-bottom:0;font-size:0.8rem;" onclick="showScreen('screen-leaderboard')">🏆 Board</button>
         <button class="btn btn-secondary" style="margin-bottom:0;font-size:0.8rem;" onclick="showScreen('screen-garage')">🚗 Garage</button>
-        <button class="btn btn-secondary" style="margin-bottom:0;font-size:0.8rem;" onclick="Shop.open('screen-title')">🛒 Shop</button>
       </div>
     </div>
   </div>
@@ -644,7 +496,6 @@
       <!-- Fixed footer -->
       <div style="flex-shrink:0;padding:10px 0 16px;display:flex;gap:8px;">
         <button class="btn btn-secondary" style="margin-bottom:0;" onclick="showScreen('screen-title')">← BACK</button>
-        <button class="btn btn-secondary" style="margin-bottom:0;background:rgba(0,255,200,0.06);border-color:rgba(0,255,200,0.2);color:#00ffc8;" onclick="Shop.open('screen-garage')">🛒 Shop</button>
       </div>
     </div>
   </div>
@@ -664,88 +515,8 @@
   </div>
 
   <!-- AD INTERSTITIAL SCREEN -->
-  <div id="screen-ad" class="screen">
-    <div class="ad-box">
-      <div class="ad-label">Advertisement</div>
-      <div class="ad-placeholder">
-        <div class="ad-icon">📺</div>
-        <div>Ad space — connect your ad network</div>
-      </div>
-      <div id="ad-countdown">Closing in 5…</div>
-      <button id="ad-close-btn" class="btn btn-secondary" style="margin-bottom:0;" onclick="AdSystem.close()">✕ Close Ad</button>
-      <div class="ad-skip-note">Remove ads forever in the Shop</div>
-    </div>
-  </div>
-
-  <!-- MARKETPLACE / SHOP SCREEN -->
-  <div id="screen-shop" class="screen">
-    <div class="shop-panel">
-      <div class="shop-header">
-        <h2 style="margin-bottom:4px;">🛒 SHOP</h2>
-        <div class="shop-coins-display" id="shop-coins">🪙 0 coins</div>
-      </div>
-      <div class="shop-scroll">
-        <div class="shop-section-label">Remove Ads</div>
-        <div class="shop-item" id="shop-item-noads">
-          <div class="shop-item-info">
-            <div class="shop-item-icon">🚫</div>
-            <div>
-              <div class="shop-item-name">No Ads</div>
-              <div class="shop-item-sub">Remove all ads forever</div>
-            </div>
-          </div>
-          <button class="shop-buy-btn" id="shop-btn-noads" onclick="Shop.buy('noads')">$4.99</button>
-        </div>
-
-        <div class="shop-section-label">Coin Packs</div>
-        <div class="shop-item">
-          <div class="shop-item-info">
-            <div class="shop-item-icon">🪙</div>
-            <div>
-              <div class="shop-item-name">1,000 Coins</div>
-              <div class="shop-item-sub">Good start</div>
-            </div>
-          </div>
-          <button class="shop-buy-btn" onclick="Shop.buy('coins_1000')">$1.99</button>
-        </div>
-        <div class="shop-item">
-          <div class="shop-item-info">
-            <div class="shop-item-icon">🪙</div>
-            <div>
-              <div class="shop-item-name">2,500 Coins</div>
-              <div class="shop-item-sub">Popular</div>
-            </div>
-          </div>
-          <button class="shop-buy-btn" onclick="Shop.buy('coins_2500')">$4.99</button>
-        </div>
-        <div class="shop-item">
-          <div class="shop-item-info">
-            <div class="shop-item-icon">🪙</div>
-            <div>
-              <div class="shop-item-name">5,000 Coins</div>
-              <div class="shop-item-sub">Best value</div>
-            </div>
-          </div>
-          <button class="shop-buy-btn" onclick="Shop.buy('coins_5000')">$9.99</button>
-        </div>
-        <div class="shop-item" style="margin-bottom:14px;">
-          <div class="shop-item-info">
-            <div class="shop-item-icon">🪙</div>
-            <div>
-              <div class="shop-item-name">10,000 Coins</div>
-              <div class="shop-item-sub">Unlock everything</div>
-            </div>
-          </div>
-          <button class="shop-buy-btn" onclick="Shop.buy('coins_10000')">$19.99</button>
-        </div>
-      </div>
-      <div class="shop-footer">
-        <button class="btn btn-secondary" style="margin-bottom:0;" id="shop-back-btn" onclick="Shop.close()">← BACK</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- PAUSE SCREEN -->
+    <!-- MARKETPLACE / SHOP SCREEN -->
+    <!-- PAUSE SCREEN -->
   <div id="screen-pause" class="screen">
     <div class="panel">
       <h2>PAUSED</h2>
