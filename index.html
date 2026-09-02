@@ -93,6 +93,13 @@
       -webkit-backdrop-filter: blur(16px);
       width: min(360px, 90vw);
       text-align: center;
+      /* CrazyGames requires legibility down to 800x450. The panel is taller
+         than 450px at full size, and body sets overflow:hidden, so without
+         this it silently clipped the title and the bottom buttons. */
+      max-height: 94vh;
+      overflow-y: auto;
+      overflow-x: hidden;
+      touch-action: pan-y;
     }
     /* Typography */
     .game-title {
@@ -456,6 +463,17 @@
     .scroll-panel::-webkit-scrollbar-track { background: transparent; }
     .scroll-panel::-webkit-scrollbar-thumb { background: rgba(0,255,200,0.2); border-radius: 2px; }
 
+    /* Short viewports: tighten everything so the panel fits without scrolling */
+    @media (max-height: 620px) {
+      .panel { padding: 14px 20px; }
+      .game-title { font-size: clamp(1.5rem, 6.5vh, 2.4rem); line-height: 1.05; }
+      .game-subtitle { font-size: 0.6rem; margin-bottom: 6px; }
+      .instructions { gap: 3px; margin-bottom: 8px; font-size: 0.72rem; }
+      .instructions span.key { font-size: 0.62rem; min-width: 46px; padding: 1px 6px; }
+      .btn { padding: 10px 16px; font-size: 0.85rem; margin-bottom: 8px; }
+      h2 { font-size: 1.1rem; margin-bottom: 6px; }
+      .scroll-panel { max-height: 44vh; }
+    }
   </style>
 </head>
 <body>
@@ -580,6 +598,6 @@
 
 </div>
 
-<script src="game.js?v=1.8.0"></script>
+<script src="game.js?v=1.8.1"></script>
 </body>
 </html>
