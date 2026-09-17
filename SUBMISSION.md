@@ -68,13 +68,52 @@ Driving / Arcade
   come from user input outside gameplay, so the interstitial is queued at
   death and spent on PLAY AGAIN. No save API - localStorage only.
 
-## Known follow-ups (post-submission)
-- Car traits pass: 8 of 11 cars are cosmetic-only, so the garage grind pays
-  out in nothing. One distinct trait each (ECO gentler ramp, PURSUIT wider
-  pickup, FIRETRUCK one free hit, RACER bigger nitro, PHANTOM higher top
-  speed, TAXI PRO +25% coins) turns the progression into a reason to play.
-- Coin store is not possible on these portals: CrazyGames IAP is invite-only
-  via their Xsolla account, and own-payment flows are forbidden. The route
-  for that is a Google Play wrapper build using Play Billing.
+## Rejections
+- **CrazyGames** (2026-09-16): boilerplate rejection, "overall quality does
+  not yet meet expectations" - no specifics. Read as a curation/fit call,
+  not a technical failure (nothing in QA was flagged).
+- **GameDistribution** (2026-09-17): explicit "not a quality issue... could
+  fit more naturally with other game portals" - a portfolio-fit rejection,
+  not a defect report.
+- Both letters converge on the same underlying gap rather than two different
+  problems: nothing visibly distinguishes this from any other lane-dodger
+  in a screenshot, because 8 of 11 cars were pure recolors. That's what the
+  traits pass below directly answers.
+
+## Car traits pass (done 2026-09-17)
+Each of the six previously-cosmetic cars now has one real mechanical hook,
+implemented as `perk` objects on CARS entries in game.js, read through a
+single `activePerk(type)` helper so each system only asks for what it needs:
+
+| car | cost | perk | verified |
+|---|---|---|---|
+| ECO | 220 | speed ramps up at 0.6x the normal rate | speed after 10s: 428 vs 500 baseline, exact |
+| PURSUIT | 500 | coin pickup radius x1.4 (1.96x area) | pickup box area ratio 1.96, exact (1.4^2) |
+| FIRETRUCK | 1000 | absorbs one hit per run before dying | forced-collision test: survives hit 1, dies on hit 2 |
+| RACER | 2000 | nitro drains at 0.65x, regens at 1.6x | drain/regen both confirmed slower/faster than baseline |
+| PHANTOM | 3500 | max speed cap x1.18, score rate x1.15 | cap 1062 vs 900, score ratio 1.15, both exact |
+| TAXI PRO | 5000 | +25% coins per pickup, fractional carry so it can't drift over a long run | 4 pickups -> 5 coins banked, exact |
+
+MONSTER and SNOWPLOW keep their existing crush abilities (unaffected - those
+already had a real perk, they just aren't expressed through the `perk` field).
+The three starter cars (SPEEDSTER/CRUISER/CLASSIC) intentionally carry none.
+
+Garage cards reuse the existing `.car-ability` description slot, so all 8
+non-starter cars now show a real reason to own them, not just a cost.
+
+## Known follow-ups
+- Coin store is not possible on CrazyGames/GameDistribution: CrazyGames IAP
+  is invite-only via their Xsolla account, and own-payment flows are
+  forbidden on both. The route for that is a Google Play wrapper using
+  Play Billing.
 - Dev hooks (?coins / ?unlock / ?reset) are hostname-gated to localhost and
   *.github.io, inert on any published host.
+
+## Next steps (agreed 2026-09-17)
+1. Push the traits-pass build to **itch.io** first - zero curation, live same
+   day, gets real player data (session length, whether crush vehicles get
+   touched) instead of another guess.
+2. Try the more permissive portals next: **GameMonetize**, **Y8**.
+3. Hold CrazyGames and GameDistribution for a later resubmission, once
+   itch.io shows the traits pass actually changes how the game plays -
+   don't resend to either on a hunch with no new evidence.

@@ -33,21 +33,46 @@ const C = {
 // ability: null = normal car (dies on everything)
 //          'crush_cars'  = monster truck (crushes regular cars, dies on semis)
 //          'crush_all'   = snowplow semi (crushes cars + semis, dies only on head-on semi)
+//
+// perk: an optional gameplay modifier read by activePerk(type) at the point
+// each system needs it. The three starter cars (owned from the first run)
+// and the two crush vehicles (whose ability IS their perk) carry none - this
+// only exists on the six cars that were previously a pure recolor with no
+// reason to grind for one over another.
 const CARS = [
   { id: 'red',      name: 'SPEEDSTER',   emoji: '🚗',  cost: 0,     color: '#ff4466', accent: '#ff8099', ability: null },
   { id: 'blue',     name: 'CRUISER',     emoji: '🚙',  cost: 80,    color: '#4488ff', accent: '#88bbff', ability: null },
   { id: 'yellow',   name: 'CLASSIC',     emoji: '🚕',  cost: 150,   color: '#ffcc00', accent: '#ffe066', ability: null },
-  { id: 'green',    name: 'ECO',         emoji: '🚘',  cost: 220,   color: '#33dd88', accent: '#88ffcc', ability: null },
-  { id: 'police',   name: 'PURSUIT',     emoji: '🚔',  cost: 500,   color: '#6688ff', accent: '#aabbff', ability: null },
-  { id: 'fire',     name: 'FIRETRUCK',   emoji: '🚒',  cost: 1000,  color: '#ff3300', accent: '#ff7766', ability: null },
-  { id: 'sport',    name: 'RACER',       emoji: '🏎️', cost: 2000,  color: '#cc44ff', accent: '#ee88ff', ability: null },
-  { id: 'truck',    name: 'PHANTOM',     emoji: '🚛',  cost: 3500,  color: '#888899', accent: '#aabbcc', ability: null },
-  { id: 'taxi',     name: 'TAXI PRO',    emoji: '🛻',  cost: 5000,  color: '#ffaa00', accent: '#ffcc55', ability: null },
+  { id: 'green',    name: 'ECO',         emoji: '🚘',  cost: 220,   color: '#33dd88', accent: '#88ffcc', ability: null,
+    perk: { type: 'gentle_ramp', mult: 0.6 },
+    desc: 'Speed builds up slower - more time to react.' },
+  { id: 'police',   name: 'PURSUIT',     emoji: '🚔',  cost: 500,   color: '#6688ff', accent: '#aabbff', ability: null,
+    perk: { type: 'wide_pickup', mult: 1.4 },
+    desc: 'Wider coin pickup radius.' },
+  { id: 'fire',     name: 'FIRETRUCK',   emoji: '🚒',  cost: 1000,  color: '#ff3300', accent: '#ff7766', ability: null,
+    perk: { type: 'shield', charges: 1 },
+    desc: 'Survives one hit per run.' },
+  { id: 'sport',    name: 'RACER',       emoji: '🏎️', cost: 2000,  color: '#cc44ff', accent: '#ee88ff', ability: null,
+    perk: { type: 'nitro', drainMult: 0.65, regenMult: 1.6 },
+    desc: 'Bigger nitro tank, faster recharge.' },
+  { id: 'truck',    name: 'PHANTOM',     emoji: '🚛',  cost: 3500,  color: '#888899', accent: '#aabbcc', ability: null,
+    perk: { type: 'overdrive', speedMult: 1.18, scoreMult: 1.15 },
+    desc: 'Higher top speed. Faster scoring.' },
+  { id: 'taxi',     name: 'TAXI PRO',    emoji: '🛻',  cost: 5000,  color: '#ffaa00', accent: '#ffcc55', ability: null,
+    perk: { type: 'coin_bonus', mult: 1.25 },
+    desc: '+25% coins from every pickup.' },
   { id: 'monster',  name: 'MONSTER',     emoji: '🚙',  cost: 8000,  color: '#cc6600', accent: '#ff9933', ability: 'crush_cars',
     desc: 'Crushes cars! Dies on semis.' },
   { id: 'snowplow', name: 'SNOWPLOW',    emoji: '🚛',  cost: 10000, color: '#1f7fd6', accent: '#8fe0ff', ability: 'crush_all',
     desc: 'Crushes everything! Head-on semis = death.' },
 ];
+
+// Reads the active car's perk only when its type matches, so callers never
+// need to know which car carries which perk - just what they're asking for.
+function activePerk(type) {
+  const p = Game.activeCar && Game.activeCar.perk;
+  return (p && p.type === type) ? p : null;
+}
 
 const ENEMY_EMOJIS = ['🚙','🚐','🚑','🚓','🚚','🚌','🚎','🏎️','🚜'];
 
@@ -453,6 +478,13 @@ const Audio = {
   playCombo() {
     [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.09, 'sine', 0.22, i * 0.07));
   },
+  // FIRETRUCK's shield absorbing a hit: a bright, brief descending chirp -
+  // distinct from playCoin's cheerful rise and playCrash's destructive noise,
+  // since this is neither a reward nor a death.
+  playShield() {
+    this.tone(1400, 0.05, 'square', 0.18);
+    this.tone(700, 0.08, 'square', 0.16, 0.05);
+  },
   playCrash() {
     if (!this.ctx || this.muted) return;
     try {
@@ -827,6 +859,7 @@ const Player = {
   alive: true,
   coinStreak: 0,
   invincible: 0,  // seconds of invincibility after spawn
+  shieldCharges: 0,  // FIRETRUCK perk: hits absorbed before a collision kills
   engineTrail: [],
   laneCooldown: 0,     // time remaining before next lane switch allowed
   _prevLeft: false, _prevRight: false,
@@ -886,13 +919,17 @@ const Player = {
     this.lane = this.targetLane;
     this.x = getLaneCenterX(this.lane);
     this.drawX = lerp(this.drawX, this.x, 12 * dt);
-    // Nitro
+    // Nitro. RACER's perk shrinks drain and grows regen; nitroFuel stays a
+    // 0..1 fraction, so "bigger tank" is expressed as lasting longer per use.
+    const nitroPerk = activePerk('nitro');
+    const nitroDrain = C.NITRO_DRAIN * (nitroPerk ? nitroPerk.drainMult : 1);
+    const nitroRegen = C.NITRO_REGEN * (nitroPerk ? nitroPerk.regenMult : 1);
     if (Input.nitro && this.nitroFuel > 0) {
       this.isNitro = true;
-      this.nitroFuel = clamp(this.nitroFuel - C.NITRO_DRAIN * dt, 0, 1);
+      this.nitroFuel = clamp(this.nitroFuel - nitroDrain * dt, 0, 1);
     } else {
       this.isNitro = false;
-      this.nitroFuel = clamp(this.nitroFuel + C.NITRO_REGEN * dt, 0, 1);
+      this.nitroFuel = clamp(this.nitroFuel + nitroRegen * dt, 0, 1);
     }
     // Engine trail
     const _trailH = Game.activeCar ? (Game.activeCar.id === 'monster' ? C.MONSTER_H : Game.activeCar.id === 'snowplow' ? C.PLOW_H : C.CAR_H) : C.CAR_H;
@@ -912,7 +949,11 @@ const Player = {
     if (id === 'monster')       { vw = C.MONSTER_W; vh = C.MONSTER_H; }
     else if (id === 'snowplow') { vw = C.PLOW_W;    vh = C.PLOW_H; }
     else                        { vw = C.CAR_W;     vh = C.CAR_H; }
-    return { x: this.drawX - vw/2, y: this.y - vh/2, w: vw, h: vh };
+    // PURSUIT's wide_pickup perk grows the catch radius, not the sprite -
+    // scale the box around the vehicle's own centre so it stays vehicle-shaped.
+    const wide = carData && carData.perk && carData.perk.type === 'wide_pickup' ? carData.perk.mult : 1;
+    const pw = vw * wide, ph = vh * wide;
+    return { x: this.drawX - pw/2, y: this.y - ph/2, w: pw, h: ph };
   },
 
   getHitbox(carData) {
@@ -2060,6 +2101,11 @@ const Game = {
     const carId = this.trialMode ? this._trialCarId : Save.data.activeCar;
     this.activeCar = CARS.find(c => c.id === carId) || CARS[0];
     Player.init();
+    // FIRETRUCK's shield and TAXI PRO's fractional coin bonus are per-run
+    // state, reset alongside everything else Player.init() doesn't own.
+    const shieldPerk = activePerk('shield');
+    Player.shieldCharges = shieldPerk ? shieldPerk.charges : 0;
+    this._coinBonusCarry = 0;
     Enemies.reset();
     Coins.reset();
     Scenery.init();
@@ -2184,11 +2230,17 @@ const Game = {
   _update(dt) {
     if (this.state !== 'playing') return;
     this.elapsed += dt;
-    // Speed ramp
-    this.speed = clamp(C.BASE_SPEED + this.elapsed * C.SPEED_INC, C.BASE_SPEED, C.MAX_SPEED);
+    // Speed ramp. ECO's gentle_ramp slows how fast speed climbs; PHANTOM's
+    // overdrive raises the ceiling it climbs toward. Both read through
+    // activePerk() so at most one applies, matched to whichever car is active.
+    const rampPerk = activePerk('gentle_ramp');
+    const overdrive = activePerk('overdrive');
+    const speedInc = C.SPEED_INC * (rampPerk ? rampPerk.mult : 1);
+    const maxSpeed = C.MAX_SPEED * (overdrive ? overdrive.speedMult : 1);
+    this.speed = clamp(C.BASE_SPEED + this.elapsed * speedInc, C.BASE_SPEED, maxSpeed);
     const effectiveSpeed = this.speed * (Player.isNitro ? C.NITRO_BOOST : 1);
-    // Score
-    this.score = Math.floor(this.elapsed * 12 + this.sessionCoins * 15);
+    // Score. PHANTOM's overdrive also scores faster, matching its higher risk.
+    this.score = Math.floor((this.elapsed * 12 + this.sessionCoins * 15) * (overdrive ? overdrive.scoreMult : 1));
     // Road scroll
     roadScrollY += effectiveSpeed * dt;
     // Update
@@ -2198,16 +2250,37 @@ const Game = {
     Scenery.update(dt, effectiveSpeed);
     Particles.update(dt);
     FloatTexts.update(dt);
-    // Collision
+    // Collision. FIRETRUCK's shield spends a charge instead of ending the
+    // run: a short invincibility window lets the vehicle that hit us clear
+    // before the next collision check, since it isn't removed from play.
     if (Player.invincible <= 0 && Enemies.checkCollision(this.activeCar)) {
-      this._die();
-      return;
+      if (Player.shieldCharges > 0) {
+        Player.shieldCharges--;
+        Player.invincible = 1.2;
+        Audio.playShield();
+        FloatTexts.add(Player.drawX, Player.y - 50, 'SHIELD!', '#66ffee', 24);
+        Particles.emit(Player.drawX, Player.y, 16, {
+          spread: 260, speed: 180, life: 0.5, lifeVar: 0.2, color: '#66ffee', size: 6, sizeVar: 5,
+        });
+      } else {
+        this._die();
+        return;
+      }
     }
     // Coins
     const collected = Coins.checkCollect();
     if (collected.length) {
       Player.coinStreak += collected.length;
       this.sessionCoins += collected.length;
+      // TAXI PRO's +25% is fractional per pickup; carry the remainder across
+      // frames rather than rounding it away each time, so it doesn't drift
+      // short over a long run.
+      const coinBonus = activePerk('coin_bonus');
+      if (coinBonus) {
+        this._coinBonusCarry += collected.length * (coinBonus.mult - 1);
+        const whole = Math.floor(this._coinBonusCarry);
+        if (whole > 0) { this._coinBonusCarry -= whole; this.sessionCoins += whole; }
+      }
       Audio.playCoin();
       for (const c of collected) {
         FloatTexts.add(c.x, c.y - 20, '+1', '#ffd700', 20);
